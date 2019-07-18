@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#TODO: read from file?
+#TODO: read from file? Process as args?
 REDCAP_VERSION=9.1.1
 REDCAP_PATCH_VERSION=9.1.1
 
@@ -28,6 +28,8 @@ pushd $TEMP_UNZIP_DIR/redcap/redcap_v${REDCAP_VERSION}
     fi
     echo "REDCap ${REDCAP_VERSION} was successfully patched"
     patch -p4 < $DIR/redcap-${REDCAP_PATCH_VERSION}.patch # actually perform the patch
+
+    patch -p4 < $DIR/redcap-sql-${REDCAP_PATCH_VERSION}.patch # adds the SQL file needed for customization
 
 pushd $TEMP_UNZIP_DIR
     zip -ur $DIR/redcap${REDCAP_VERSION}.zip . # update the zip file with the new information
