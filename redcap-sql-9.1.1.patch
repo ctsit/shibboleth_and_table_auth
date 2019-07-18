@@ -1,0 +1,11 @@
+diff --git a/redcap-unzip/redcap/redcap_v9.1.1/Resources/sql/shibboleth_table_customizations.sql b/redcap-unzip/redcap/redcap_v9.1.1/Resources/sql/shibboleth_table_customizations.sql
+new file mode 100644
+index 0000000..7785cb4
+--- /dev/null
++++ b/redcap-unzip/redcap/redcap_v9.1.1/Resources/sql/shibboleth_table_customizations.sql
+@@ -0,0 +1,5 @@
++REPLACE INTO redcap_config(field_name,value) VALUES('shibboleth_table_login_image', 'https://wiki.shibboleth.net/confluence/download/attachments/131074/atl.site.logo?version=2&modificationDate=1502412080059&api=v2');
++REPLACE INTO redcap_config(field_name,value) VALUES('shibboleth_table_shibboleth_login_option', 'Use Shibboleth');
++REPLACE INTO redcap_config(field_name,value) VALUES('shibboleth_table_table_login_option', 'Use Table');
++REPLACE INTO redcap_config(field_name,value) VALUES('shibboleth_table_shibboleth_login_text', 'Descriptive Shibboleth text');
++REPLACE INTO redcap_config(field_name,value) VALUES('shibboleth_table_splash_default', 'shib');
