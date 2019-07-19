@@ -52,7 +52,7 @@ Scroll further down on the same page to a section titled `Additional Shibboleth 
 ![control fields mapping](img/control_fields_mapping.png)
 
 1. **Default login method**: Controls which login option users are first presented with upon navigating to your REDCap website. `Shibboleth` or `Table`. Users can change this by clicking on the tab for the other option.
-2. **Shibboleth Link Image URL**: Controls the image presented to users in the button for Shibboleth login.
-3. **Shibboleth login selection title**: Controls the text displayed in the tab used to display Shibboleth login.
-4. **Table login selection title**: Controls the text displayed in the tab used to display table-based login.
-5. **Shibboleth login descriptive text**: Controls optional text to be displayed above the Shibboleth login button.
+2. **Shibboleth login selection title**: Controls the text displayed in the tab used to display Shibboleth login.
+3. **Table login selection title**: Controls the text displayed in the tab used to display table-based login.
+4. **Shibboleth login descriptive text**: Controls optional text to be displayed above the Shibboleth login button.
+5. **Shibboleth Link Image URL**: Controls the image presented to users in the button for Shibboleth login.
