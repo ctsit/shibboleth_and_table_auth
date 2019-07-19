@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#TODO: test for required arg
-if [ ! -e ${1} ]; then
+# check for input, exit if none given
+if [ $# -eq 0 ]; then
     echo "Please provide the filename of redcap zip file you wish to patch."
     exit
 fi
@@ -22,6 +22,7 @@ TARGET_FILE=output/${REDCAP_ZIP}
 
 # unzip files into a temporary redcap_unzip directory
 echo "Unzipping ${REDCAP_ZIP} into a temporary folder"
+echo "Please be patient, this may take a few minutes"
 TEMP_UNZIP_DIR=`mktemp -d`
 unzip -q ${REDCAP_ZIP} -d $TEMP_UNZIP_DIR
 
