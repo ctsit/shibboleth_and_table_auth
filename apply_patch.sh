@@ -2,7 +2,7 @@
 
 # check for input, exit if none given
 if [ $# -eq 0 ]; then
-    echo "Please provide the filename of redcap zip file you wish to patch."
+    echo "Please provide the filename of the redcap zip file you wish to patch."
     exit
 fi
 
@@ -21,6 +21,10 @@ fi
 TARGET_FILE=output/${REDCAP_ZIP}
 
 # unzip files into a temporary redcap_unzip directory
+if [ ! -e ${REDCAP_ZIP} ]; then
+    echo "${REDCAP_ZIP} does not exist. Please provide a valid file name."
+    exit
+fi
 echo "Unzipping ${REDCAP_ZIP} into a temporary folder"
 echo "Please be patient, this may take a few minutes"
 TEMP_UNZIP_DIR=`mktemp -d`
