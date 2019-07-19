@@ -30,7 +30,7 @@ pushd $TEMP_UNZIP_DIR/redcap/redcap_v${REDCAP_VERSION} > /dev/null
     DRY="$(patch -p4 --dry-run < $DIR/redcap-${REDCAP_PATCH_VERSION}.patch)"
     # first check if the patch has any issues
     if [[ $DRY == *"FAILED"* ]]; then
-        echo "Patching has failed due to "
+        echo "Patching has failed"
         echo $DRY
         echo "Please report this error as an issue at https://github.com/ctsit/shibboleth_and_table_auth/issues"
         echo "Please include the text of the error and the REDCap version you were trying to patch."
