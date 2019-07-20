@@ -10,6 +10,8 @@ A REDCap zip file downloaded from Vanderbilt's community web site.
 Access to a terminal with a bash shell and basic gnu utilities to run the apply_patch script.
 
 # Instructions
+Visit https://github.com/ctsit/uf_redcap_shibboleth_config/releases to download the highest release version of this repository that is less than or equal to the version of REDCap you want to deploy. e.g., if you are patching REDCap 9.2.0, download the 9.1.1 release of this repo.
+
 Download a redcap zip file, e.g. from the [REDCap community site](https://community.projectredcap.org/page/download.html). This tool works on both the "Install" zip files and the "Upgrade" zip files. Copy your redcap zip file into the root directory of this repository.
 
 Run the following command:
@@ -22,6 +24,9 @@ The program will report if the patch worked or if there was an issue. Once finis
 
 If you experience an error or even a warning during the patching process, please report it as a new issue in Github. The issue list for this repo is at `https://github.com/ctsit/shibboleth_and_table_auth/issues`. Please include the text of the error or warning and the version of REDCap you were trying to patch.
 
+## Configure Shibboleth
+
+This login method needs to allow Shibboleth login but not _require_ it. Sample Apache directives for configuring your REDCap instance are available in [shib_table_auth.conf](shib_table_auth.conf). You will need to customize those directives for your site. Basic instructions for doing that are in the file.
 
 ## If you are launching this version of REDCap for the first time
 
@@ -33,7 +38,7 @@ You will need to overwrite your existing files with the updated ones. All of the
 
 ## After your REDCap is launched or updated
 
-You will need to update REDCap's MySQL database if you want to support the new customization fields. A SQL script has been provided for this at `shib_table_sql/9.1.1.sql`. This file will need to be applied to your REDCap server's database. Use whatever method suits you to apply these changes.
+You will need to update REDCap's MySQL database if you want to support the new customization fields. A SQL script has been provided for this at `shib_table_sql/9.1.1.sql`. This file will need to be applied to your REDCap server's database. Use whatever method suits you to apply these changes. If additional SQL files exist in that folder, apply them all, in order, from lowest version number to highest.
 
 # Usage
 
