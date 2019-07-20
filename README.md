@@ -33,7 +33,7 @@ You will need to overwrite your existing files with the updated ones. All of the
 
 ## After your REDCap is launched or updated
 
-You will need to update REDCap's MySQL database if you want to support the new customization fields. A SQL script has been provided for this at `sql/9.1.1.sql`. This file will need to be applied to your REDCap server's database. Use whatever method suits you to apply these changes.
+You will need to update REDCap's MySQL database if you want to support the new customization fields. A SQL script has been provided for this at `shib_table_sql/9.1.1.sql`. This file will need to be applied to your REDCap server's database. Use whatever method suits you to apply these changes.
 
 # Usage
 
