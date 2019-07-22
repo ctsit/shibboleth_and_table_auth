@@ -1,5 +1,5 @@
 diff --git a/redcap-unzip/redcap/redcap_v9.1.1/Classes/Authentication.php b/redcap-unzip/redcap/redcap_v9.1.1/Classes/Authentication.php
-index c047831..65308bb 100644
+index c047831..e12549b 100644
 --- a/redcap-unzip/redcap/redcap_v9.1.1/Classes/Authentication.php
 +++ b/redcap-unzip/redcap/redcap_v9.1.1/Classes/Authentication.php
 @@ -438,30 +438,86 @@ class Authentication
@@ -73,7 +73,7 @@ index c047831..65308bb 100644
 +                     loginFunction();
 +                 }
 +             }
-+		}
++         }
  		// SAMS authentication (specifically used by the CDC)
  		elseif ($auth_meth == 'sams') {
  			// Hack for development testing
@@ -408,7 +408,7 @@ index 6bf9565..3a93a7b 100644
  				<div class="cc_menu_item"><i class="fas fa-cube fs14" style="margin-left:2px;margin-right:2px;"></i>&nbsp;<a href="<?php echo APP_URL_EXTMOD ?>manager/control_center.php"><?php echo $lang['global_142'] ?></a></div>
  			<?php } ?>
 diff --git a/redcap-unzip/redcap/redcap_v9.1.1/ControlCenter/security_settings.php b/redcap-unzip/redcap/redcap_v9.1.1/ControlCenter/security_settings.php
-index fb577b3..cd2f76c 100644
+index fb577b3..7392a6c 100644
 --- a/redcap-unzip/redcap/redcap_v9.1.1/ControlCenter/security_settings.php
 +++ b/redcap-unzip/redcap/redcap_v9.1.1/ControlCenter/security_settings.php
 @@ -144,30 +144,31 @@ print "<input type='hidden' name='redcap_csrf_token' value='".System::getCsrfTok
@@ -557,15 +557,6 @@ index fb577b3..cd2f76c 100644
 +                </select><br/>
 +        </td>
 +</tr>
-+<tr  id="shibboleth_table_login_image-tr" sq_id="shibboleth_table_login_image">
-+       <td class="cc_label"><?php echo 'Shibboleth Link Image URL' /* TODO: $lang */ ?></td>
-+       <td class="cc_data">
-+               <input class='x-form-text x-form-field '  type='text' name='shibboleth_table_login_image' value='<?php echo htmlspecialchars($element_data['shibboleth_table_login_image'], ENT_QUOTES) ?>'  /><br/>
-+               <div class="cc_info">
-+                       <?php echo "URL for image to be displayed to link to server's Shibboleth login"; /*TODO: $lang */ ?>
-+               </div>
-+       </td>
-+</tr>
 +<tr  id="shibboleth_table_shibboleth_login_option-tr" sq_id="shibboleth_table_shibboleth_login_option">
 +       <td class="cc_label"><?php echo 'Shibboleth login selection title' /* TODO: $lang */ ?></td>
 +       <td class="cc_data">
@@ -590,6 +581,15 @@ index fb577b3..cd2f76c 100644
 +               <input class='x-form-text x-form-field '  type='text' name='shibboleth_table_shibboleth_login_text' value='<?php echo htmlspecialchars($element_data['shibboleth_table_shibboleth_login_text'], ENT_QUOTES) ?>'  /><br/>
 +               <div class="cc_info">
 +                       <?php echo 'Descriptive text displayed with Shibboleth login'; /* TODO: $lang */?>
++               </div>
++       </td>
++</tr>
++<tr  id="shibboleth_table_login_image-tr" sq_id="shibboleth_table_login_image">
++       <td class="cc_label"><?php echo 'Shibboleth Link Image URL' /* TODO: $lang */ ?></td>
++       <td class="cc_data">
++               <input class='x-form-text x-form-field '  type='text' name='shibboleth_table_login_image' value='<?php echo htmlspecialchars($element_data['shibboleth_table_login_image'], ENT_QUOTES) ?>'  /><br/>
++               <div class="cc_info">
++                       <?php echo "URL for image to be displayed to link to server's Shibboleth login"; /*TODO: $lang */ ?>
 +               </div>
 +       </td>
 +</tr>
