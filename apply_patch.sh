@@ -53,15 +53,14 @@ unzip -q ${REDCAP_ZIP} -d $TEMP_UNZIP_DIR
 pushd $TEMP_UNZIP_DIR/redcap/redcap_v${REDCAP_VERSION} > /dev/null
     DRY="$(patch -p4 --dry-run < $DIR/redcap-${REDCAP_PATCH_VERSION}.patch)"
     # first check if the patch has any issues
-    if [[ $DRY == *"FAILED"* ]]; then
+    if [[ $DRY == *"FAILED"* || $DRY == *"malformed"* ]]; then
         echo "Patching has failed"
         echo $DRY
         echo "Please report this error as an issue at https://github.com/ctsit/shibboleth_and_table_auth/issues"
         echo "Please include the text of the error and the REDCap version you were trying to patch."
         exit 1
-    elif [[ $DRY == *"offset"* ]]; then
+    elif [[ $DRY == *"offset"* || $DRY == *"fuzz"* ]]; then
         echo "Patching was offset but will proceed"
-        echo $DRY
         echo "Please report this warning as an issue at https://github.com/ctsit/shibboleth_and_table_auth/issues"
         echo "Please include the text of the warning and the REDCap version you are patching."
     fi
