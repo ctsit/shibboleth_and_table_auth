@@ -1,4 +1,4 @@
-# Shibboleth and table authentation for REDCap
+# Shibboleth and table authentication for REDCap
 
 This repository provides a patch to Vanderbilt University's REDCap to allow Shibboleth and table-based authentication at the same time.
 
@@ -10,7 +10,7 @@ A REDCap zip file downloaded from Vanderbilt's community web site.
 Access to a terminal with a bash shell and basic gnu utilities to run the apply_patch script.
 
 # Instructions
-Visit https://github.com/ctsit/uf_redcap_shibboleth_config/releases to download the highest release version of this repository that is less than or equal to the version of REDCap you want to deploy. e.g., if you are patching REDCap 9.2.0, download the 9.1.1 release of this repo.
+Visit `https://github.com/ctsit/uf_redcap_shibboleth_config/releases` to download the latest release version of this repository. 
 
 Download a redcap zip file, e.g. from the [REDCap community site](https://community.projectredcap.org/page/download.html). This tool works on both the "Install" zip files and the "Upgrade" zip files. Copy your redcap zip file into the root directory of this repository.
 
@@ -26,15 +26,15 @@ If you experience an error or even a warning during the patching process, please
 
 ## Configure Shibboleth
 
-This login method needs to allow Shibboleth login but not _require_ it. Sample Apache directives for configuring your REDCap instance are available in [shib_table_auth.conf](shib_table_auth.conf). You will need to customize those directives for your site. Basic instructions for doing that are in the file.
+This login method needs to allow Shibboleth login but not _require_ it. Sample Apache directives for configuring your REDCap instance are available in [shib\_table\_auth.conf](shib_table_auth.conf). You will need to customize those directives for your site. Basic instructions for doing that are in the file.
 
-## If you are launching this version of REDCap for the first time
+## First time for this REDCap version
 
-Use the zip file to launch your REDCap site as you normally would.
+If you are launching this version of REDCap for the first time, use the zip file to launch your REDCap site as you normally would.
 
-## If you currently have this version of REDCap running and want to add Shibboleth and Table functionality to it
+## Apply the patch without upgrading REDCap
 
-You will need to overwrite your existing files with the updated ones. All of the changed files are in the `redcap/redcap_vN.M.O/` folder.
+If you currently have this version of REDCap running and want to add Shibboleth and Table functionality to it, you will need to overwrite your existing files with the updated ones. All of the changed files are in the `redcap/redcap_vN.M.O/` folder.
 
 ## After your REDCap is launched or updated
 
