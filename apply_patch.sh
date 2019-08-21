@@ -7,8 +7,28 @@ if [ $# -eq 0 ]; then
 fi
 
 REDCAP_ZIP=${1}
-REDCAP_PATCH_VERSION=9.1.1
 REDCAP_VERSION=`echo ${REDCAP_ZIP} | sed "s/redcap//; s/_upgrade//; s/.zip//;"`
+
+# autodetect proper patch version
+MIN_REDCAP_PATCH_VERSION=9.1.1
+
+PATCH_VERSIONS=$(mktemp)
+$(ls *.patch | grep -v "sql" | sed "s/redcap-//; s/\.patch//;" > $PATCH_VERSIONS)
+if [[ $(cat $PATCH_VERSIONS | grep "$REDCAP_VERSION") ]]; then
+    REDCAP_PATCH_VERSION=$REDCAP_VERSION
+else
+    echo "${REDCAP_VERSION}" >> "$PATCH_VERSIONS"
+    if [[ "$(cat $PATCH_VERSIONS | sort -V | head -n 1)" != "$MIN_REDCAP_PATCH_VERSION" ]]; then
+        echo "${REDCAP_VERSION} is below the minimum supported version, ${MIN_REDCAP_PATCH_VERSION} and will not be patched. Aborting process."
+        rm $PATCH_VERSIONS
+        exit
+    fi
+    REDCAP_PATCH_VERSION=$(cat $PATCH_VERSIONS | sort -V | grep "$REDCAP_VERSION" -B 1 | head -n1)
+fi
+
+rm $PATCH_VERSIONS
+
+echo "Attempting to patch ${REDCAP_ZIP} using patch version ${REDCAP_PATCH_VERSION}"
 
 # determine the directory where this script resides
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -33,15 +53,14 @@ unzip -q ${REDCAP_ZIP} -d $TEMP_UNZIP_DIR
 pushd $TEMP_UNZIP_DIR/redcap/redcap_v${REDCAP_VERSION} > /dev/null
     DRY="$(patch -p4 --dry-run < $DIR/redcap-${REDCAP_PATCH_VERSION}.patch)"
     # first check if the patch has any issues
-    if [[ $DRY == *"FAILED"* ]]; then
+    if [[ $DRY == *"FAILED"* || $DRY == *"malformed"* ]]; then
         echo "Patching has failed"
         echo $DRY
         echo "Please report this error as an issue at https://github.com/ctsit/shibboleth_and_table_auth/issues"
         echo "Please include the text of the error and the REDCap version you were trying to patch."
         exit 1
-    elif [[ $DRY == *"offset"* ]]; then
+    elif [[ $DRY == *"offset"* || $DRY == *"fuzz"* ]]; then
         echo "Patching was offset but will proceed"
-        echo $DRY
         echo "Please report this warning as an issue at https://github.com/ctsit/shibboleth_and_table_auth/issues"
         echo "Please include the text of the warning and the REDCap version you are patching."
     fi
