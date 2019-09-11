@@ -56,8 +56,22 @@ Scroll further down on the same page to a section titled `Additional Shibboleth 
 
 ![control fields mapping](img/control_fields_mapping.png)
 
-1. **Default login method**: Controls which login option users are first presented with upon navigating to your REDCap website. `Shibboleth` or `Table`. Users can change this by clicking on the tab for the other option.
-2. **Shibboleth login selection title**: Controls the text displayed in the tab used to display Shibboleth login.
-3. **Table login selection title**: Controls the text displayed in the tab used to display table-based login.
-4. **Shibboleth login descriptive text**: Controls optional text to be displayed above the Shibboleth login button.
-5. **Shibboleth Link Image URL**: Controls the image presented to users in the button for Shibboleth login.
+1. **Default login method**: Controls which login option users are first presented with upon navigating to your REDCap website. `Table-Based` or one of the IdP logins (referred to by title).
+2. **Table login selection title**: Controls the text displayed in the tab used to display the table-based login.
+3. **Shibboleth login selection title**: Controls the text displayed in the tab used to display a Shibboleth login.
+4. **Shibboleth login descriptive text**: Controls optional text to be displayed above a Shibboleth login button.
+5. **Shibboleth Link Image URL**: Controls the image presented to users in the button for a Shibboleth login.
+    - Note: if using an image hosted on your REDCap server, you may path it relative to your `webroot` rather than via `https://...`.
+6. **URL for Shibboleth IdP**: Controls the URL used for Shibboleth authentication.
+    - This field should only be used if you need to support multiple IdPs. If you are unsure, leave this blank and it will be set to your server's default IdP.
+7. **Additional IdP Logins**: Additional IdP options may be added, the fields are the same as 3-6. See the section below for further discussion of multiple IdPs.
+
+## Support for Multiple IdPs
+
+If you are hosting a REDCap instance used by multiple institutions which support Shibboleth authentication, you may wish to allow users to access REDCap via their respective institution's familiar login process; this can be accomplished by adding each institution as an additional **Id**entity **P**rovider. Additional IdPs must also be configured on your server at `/etc/shibboleth/shibboleth2.xml`. The process of adding multiple IdPs to your Shibboleth Service Provider is beyond the scope of this document.
+
+At the end of the options for your final IdP you will see a button labeled "Add IdP", clicking this will create a new set of fields for you to enter information for an additional IdP. If you only had one IdP before clicking this button, a button labelled "Delete This IdP" will appear.  
+Clicking "Delete This IdP" button will eliminate all fields for the IdP whose section you have clicked this button in. Note that if you delete the final IdP login, you will be unable to add additional IdPs until you have refreshed the page.
+
+Adding or deleting IdP logins will not be permanent until you scroll to the bottom and click "Save Changes", after which tabs for each IdP that is filled in will appear on the login page in the order they were entered on the "Security & Authentication" page.
+
