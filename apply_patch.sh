@@ -51,7 +51,7 @@ TEMP_UNZIP_DIR=`mktemp -d`
 unzip -q ${REDCAP_ZIP} -d $TEMP_UNZIP_DIR
 
 pushd $TEMP_UNZIP_DIR/redcap/redcap_v${REDCAP_VERSION} > /dev/null
-    DRY="$(patch -p4 --dry-run < $DIR/redcap-${REDCAP_PATCH_VERSION}.patch)"
+    DRY="$(patch -p1 --dry-run < $DIR/redcap-${REDCAP_PATCH_VERSION}.patch)"
     # first check if the patch has any issues
     if [[ $DRY == *"FAILED"* || $DRY == *"malformed"* ]]; then
         echo "Patching has failed"
@@ -64,7 +64,7 @@ pushd $TEMP_UNZIP_DIR/redcap/redcap_v${REDCAP_VERSION} > /dev/null
         echo "Please report this warning as an issue at https://github.com/ctsit/shibboleth_and_table_auth/issues"
         echo "Please include the text of the warning and the REDCap version you are patching."
     fi
-    patch -p4 < $DIR/redcap-${REDCAP_PATCH_VERSION}.patch # actually perform the patch
+    patch -p1 < $DIR/redcap-${REDCAP_PATCH_VERSION}.patch # actually perform the patch
     echo "REDCap ${REDCAP_ZIP} was successfully patched"
 
 echo "Zipping patched redcap into ${TARGET_FILE}"
