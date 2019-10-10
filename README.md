@@ -50,7 +50,7 @@ Scroll further down on the same page to a section titled `Additional Shibboleth 
 
 ![shib auth settings](img/shib_auth_settings.png)
 
-**Shibboleth Username Login Field**: The value that is provided by the server containing your Shibboleth login ID. If your institution does not use one of the values in the dropdown menu, select `other` and a text box will appear allowing you to enter the correct value. If the value you have entered is not found, it will default to functioning as if you had chosen `None`.
+**Shibboleth Username Login Field**: The name of the key that is provided by the server containing your Shibboleth login ID. If your institution does not use one of the keys listed in the dropdown menu, select `other` and a text box will appear allowing you to enter the correct key. If the key you have entered is not found on the server, it will default to functioning as if you had chosen the option `None`.
 
 **URL for Shibboleth Logout Page**: This should be set to `/Shibboleth.sso/Logout`. This will redirect users to the server's Shibboleth logout page. You can add [parameters to alter its behavior](https://wiki.shibboleth.net/confluence/display/SHIB2/NativeSPLogoutInitiator). In this example, `return=/stage_c/` redirects users to the path `/stage_c/` on the host after shibboleth logout. The `return` parameter can be useful if your REDCap is not installed at the host's web root.
 
