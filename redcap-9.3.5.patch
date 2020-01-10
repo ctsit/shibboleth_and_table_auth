@@ -2,7 +2,8 @@ diff --git a/Classes/Authentication.php b/Classes/Authentication.php
 index cef0a651..2f6ab60d 100644
 --- a/Classes/Authentication.php
 +++ b/Classes/Authentication.php
-@@ -439,28 +439,78 @@ class Authentication
+@@ -438,30 +438,80 @@ class Authentication
+ 			} elseif (strlen($GLOBALS['shibboleth_username_field']) > 0) {
  				// Custom username field
  				$userid = $_SESSION['username'] = strtolower($_SERVER[$GLOBALS['shibboleth_username_field']]);
  			} else {
@@ -81,7 +82,9 @@ index cef0a651..2f6ab60d 100644
  			if (isset($_SESSION['redcap_userid']) && !empty($_SESSION['redcap_userid']))
  			{
  				global $project_contact_email;
-@@ -538,115 +588,29 @@ class Authentication
+ 				// DEBUGGING: If somehow the userid in the header changes mid-session, end the sessino and email the administrator.
+@@ -537,117 +587,31 @@ class Authentication
+ 			if (isset($_GET['openid_return_to'])) redirect(urldecode($_GET['openid_return_to']));
  		}
  		// Error was made in Control Center for authentication somehow
  		elseif ($auth_meth == '') {
@@ -198,7 +201,9 @@ index cef0a651..2f6ab60d 100644
  				redirect(APP_PATH_WEBROOT . "API/help.php");
  			}
  			// Display error message
-@@ -837,28 +801,123 @@ class Authentication
+ 			$objHtmlPage = new HtmlPage();
+@@ -836,30 +800,125 @@ class Authentication
+ 		if (self::enforceTwoFactorByManualForceProject()) {
  			// Display the two-factor login screen
  			self::renderTwoFactorLoginPage(true);
  		}
@@ -322,7 +327,9 @@ index cef0a651..2f6ab60d 100644
  		$display_on_email_users= ($aafDisplayOnEmailUsers== "on") ? 1 : 0;
  		$allow_create_db=$allow_create_db_default;
  		if($aafAllowLocalsCreateDB=='on' && isset($aafScopeTarget) && isset($aafMap->edupersonscopedaffiliation) && strpos($aafMap->edupersonscopedaffiliation,$aafScopeTarget)>-1){
-@@ -1771,29 +1830,29 @@ class Authentication
+ 			$allow_create_db=1; //allowing the locals to create db
+@@ -1770,31 +1829,31 @@ class Authentication
+ 		
  		// Log the failed login
  		Logging::logPageView("LOGIN_FAIL", $failedUsernameEntered);
  
@@ -353,7 +360,9 @@ index cef0a651..2f6ab60d 100644
  			} else {
  				// Add single LDAP config                
  				$dsn[] = array('type'=>'LDAP', 'dsnstuff'=>$ldapdsn);
-@@ -1827,29 +1886,29 @@ class Authentication
+ 			}
+@@ -1826,31 +1885,31 @@ class Authentication
+ 	{
  		global $auth_meth;
  		if (isset($_GET['logout']) && $_GET['logout'])
  		{
@@ -384,11 +393,46 @@ index cef0a651..2f6ab60d 100644
  
  	/**
  	 * SEARCH REDCAP_AUTH TABLE FOR USER (return boolean)
+ 	 */
 diff --git a/Config/init_functions.php b/Config/init_functions.php
-index 7c53654b..eeaf3bc7 100644
+index 7c53654b..d500fcc2 100644
 --- a/Config/init_functions.php
 +++ b/Config/init_functions.php
-@@ -455,29 +455,170 @@ function loginFunction()
+@@ -390,31 +390,31 @@ function loginFunction()
+ 	$passwordLabel = $lang['global_32'].$lang['colon'];
+ 	$passwordTextRight = "";
+ 	$rsaLogo = "";
+ 	if ($auth_meth == 'rsa') {
+ 		$rsaLogo =  RCView::div(array('style'=>'text-align:center;padding-bottom:15px;'),
+ 						RCView::img(array('src'=>'securid2.gif'))
+ 					);
+ 		$passwordLabel = $lang['global_82'].$lang['colon'];
+ 		$passwordTextRight = RCView::div(array('style'=>'color:#800000;font-size:13px;margin:4px 0;text-align:right;'),
+ 								$lang['config_functions_92']
+ 							 );
+ 	}
+ 
+ 	// Set "forgot password?" link
+ 	$forgotPassword = "";
+-	if ($auth_meth == "table" || $auth_meth == "ldap_table" || strpos($auth_meth,'aaf')>-1) { //***<AAF Modification>***
++	if ($auth_meth == "table" || $auth_meth == "ldap_table" || strpos($auth_meth,'aaf')>-1 || $auth_meth == "shibboleth_table" ) { //***<AAF Modification>***
+ 		$forgotPassword = RCView::div(array("style"=>"float:right;margin-top:10px;margin-right:10px;"),
+ 							RCView::a(array("style"=>"font-size:11px;text-decoration:underline;","href"=>APP_PATH_WEBROOT."Authentication/password_recovery.php"), $lang['pwd_reset_41'])
+ 						  );
+ 	}
+ 
+ 	// REDCap Hook injection point: Pass PROJECT_ID constant (if defined).
+ 	Hooks::call('redcap_every_page_before_render', (defined("PROJECT_ID") ? array(PROJECT_ID) : array()));
+ 
+ 	// Display the Login Form
+ 	$objHtmlPage = new HtmlPage();
+ 	$objHtmlPage->addExternalJS(APP_PATH_JS . "base.js");
+ 	$objHtmlPage->addStylesheet("jquery-ui.min.css", 'screen,print');
+ 	$objHtmlPage->addStylesheet("style.css", 'screen,print');
+ 	$objHtmlPage->addStylesheet("home.css", 'screen,print');
+ 	$objHtmlPage->PrintHeader();
+@@ -454,31 +454,172 @@ function loginFunction()
+ 			<!-- nav tabs -->
  			<ul class="nav nav-tabs" role="tablist">
  				<li role="presentation" class="nav-item"><a href="#inst-login" class="nav-link active" data-toggle="tab" aria-controls="inst-login" role="tab" data-toggle="tab">Institutional login</a>
  				</li>
@@ -560,7 +604,9 @@ index 7c53654b..eeaf3bc7 100644
  
  	// Sanitize action URL for login form
  	$loginFormActionUrl = js_escape(str_replace('`', '', $_SERVER['REQUEST_URI']));
-@@ -1676,28 +1817,33 @@ function checkUserPassword($username, $password, $authSessionName = "login_test"
+ 	// Give extra room for non-English languages
+@@ -1675,30 +1816,35 @@ function checkUserPassword($username, $password, $authSessionName = "login_test"
+ 	$_POST['username'] = $username;
  
  	// Get current session_id, which will get inevitably changed if auth is successful
  	$old_session_id = substr(session_id(), 0, 32);
@@ -594,11 +640,13 @@ index 7c53654b..eeaf3bc7 100644
  		}
  	}
  
+ 	// Now that we're done, remove this part of the session to prevent conflict with REDCap user sessioning
 diff --git a/ControlCenter/create_user.php b/ControlCenter/create_user.php
 index 6bc37b57..a7c0e2d3 100644
 --- a/ControlCenter/create_user.php
 +++ b/ControlCenter/create_user.php
-@@ -158,29 +158,29 @@ if (isset($_POST['username']) && isset($_POST['user_firstname']) && isset($_POST
+@@ -157,31 +157,31 @@ if (isset($_POST['username']) && isset($_POST['user_firstname']) && isset($_POST
+ }
  
  
  
@@ -629,11 +677,13 @@ index 6bc37b57..a7c0e2d3 100644
  				  'ControlCenter/create_user_bulk.php'=>RCView::img(array('src'=>'xls2.png')) . $lang['control_center_410']);
  	RCView::renderTabs($tabs);
  	print 	RCView::p(array(), $lang['control_center_43']);
+ }
 diff --git a/ControlCenter/edit_project.php b/ControlCenter/edit_project.php
 index d44758ae..f45f3d0d 100644
 --- a/ControlCenter/edit_project.php
 +++ b/ControlCenter/edit_project.php
-@@ -133,28 +133,29 @@ if (isset($_GET['project']) && is_numeric($_GET['project']))
+@@ -132,30 +132,31 @@ if (isset($_GET['project']) && is_numeric($_GET['project']))
+ 			<?php echo $lang['project_settings_06'] ?>
  		</td>
  		<td class="cc_data">
  			<select class="x-form-text x-form-field" style="" name="auth_meth">
@@ -663,11 +713,13 @@ index d44758ae..f45f3d0d 100644
  				<?php
  				$languages = Language::getLanguageList();
  				foreach ($languages as $language) {
+ 					$selected = ($element_data['project_language'] == $language) ? "selected" : "";
 diff --git a/ControlCenter/header.php b/ControlCenter/header.php
 index e7c063ec..ce054a72 100644
 --- a/ControlCenter/header.php
 +++ b/ControlCenter/header.php
-@@ -74,29 +74,29 @@ hr { border-top: 1px solid #ccc; }
+@@ -73,31 +73,31 @@ hr { border-top: 1px solid #ccc; }
+ <div class="row">
  
  	<?php	
  	// Get count of pending To-Do List items
@@ -698,7 +750,9 @@ index e7c063ec..ce054a72 100644
              <div class="cc_menu_divider"></div>
          </div>
  		
-@@ -133,29 +133,29 @@ hr { border-top: 1px solid #ccc; }
+ 		<!-- Control Center Home -->
+@@ -132,31 +132,31 @@ hr { border-top: 1px solid #ccc; }
+ 		<div class="cc_menu_divider"></div>
  		
  		<!-- Projects -->
  		<div class="cc_menu_section">
@@ -729,11 +783,13 @@ index e7c063ec..ce054a72 100644
  			<div class="cc_menu_header"><?php echo $lang['control_center_442'] ?></div>
  			<?php if (defined("APP_URL_EXTMOD")) { ?>
  				<div class="cc_menu_item"><i class="fas fa-cube fs14" style="margin-left:2px;margin-right:2px;"></i>&nbsp;<a href="<?php echo APP_URL_EXTMOD ?>manager/control_center.php"><?php echo $lang['global_142'] ?></a></div>
+ 			<?php } ?>
 diff --git a/ControlCenter/security_settings.php b/ControlCenter/security_settings.php
 index c2e11cf6..0b9d03ea 100644
 --- a/ControlCenter/security_settings.php
 +++ b/ControlCenter/security_settings.php
-@@ -10,28 +10,29 @@ if (!SUPER_USER) redirect(APP_PATH_WEBROOT);
+@@ -9,30 +9,31 @@ if (!SUPER_USER) redirect(APP_PATH_WEBROOT);
+ 
  $changesSaved = false;
  
  // If project default values were changed, update redcap_config table with new values
@@ -763,7 +819,9 @@ index c2e11cf6..0b9d03ea 100644
  	// Log any changes in log_event table
  	if (count($changes_log) > 0) {
  		Logging::logEvent(implode(";\n",$sql_all),"redcap_config","MANAGE","",implode(",\n",$changes_log),"Modify system configuration");
-@@ -145,28 +146,29 @@ print "<input type='hidden' name='redcap_csrf_token' value='".System::getCsrfTok
+ 	}
+@@ -144,30 +145,31 @@ print "<input type='hidden' name='redcap_csrf_token' value='".System::getCsrfTok
+ 		</div>
  	</td>
  	<td class="cc_data">
  		<select class="x-form-text x-form-field" style="" name="auth_meth_global">
@@ -793,7 +851,9 @@ index c2e11cf6..0b9d03ea 100644
  
  <!-- Two Factor Auth Settings -->
  <tr>
-@@ -638,60 +640,286 @@ print "<input type='hidden' name='redcap_csrf_token' value='".System::getCsrfTok
+ 	<td colspan="2">
+@@ -637,62 +639,288 @@ print "<input type='hidden' name='redcap_csrf_token' value='".System::getCsrfTok
+ 			(e.g., Yahoo, MyOpenID)
  		</div>
  	</td>
  </tr>
@@ -1081,6 +1141,7 @@ index c2e11cf6..0b9d03ea 100644
          <td class="cc_data">
                  <input class='x-form-text x-form-field' type='text' name='aafAccessUrl' value='<?php echo htmlspecialchars($element_data['aafAccessUrl'], ENT_QUOTES) ?>' id='aafAnch'/><br/>
                  <div class="cc_info">
+                         <?php echo $lang['system_config_562'] ?>
 diff --git a/Help/shib_table_help.php b/Help/shib_table_help.php
 new file mode 100644
 index 00000000..d6a6776b
@@ -1122,7 +1183,8 @@ diff --git a/LanguageUpdater/English.ini b/LanguageUpdater/English.ini
 index e65a09a5..0eee2ab5 100644
 --- a/LanguageUpdater/English.ini
 +++ b/LanguageUpdater/English.ini
-@@ -12055,15 +12055,32 @@ alerts_32 = "Learn more"
+@@ -12054,16 +12054,33 @@ alerts_31 = "This setting is optional for Alerts & Notifications. When enabled,
+ alerts_32 = "Learn more"
  alerts_33 = "How to use 'stop logic' to disable a scheduled alert"
  alerts_34 = "If you have alerts that will not be sent immediately but instead are scheduled to be sent later,
  			it might be a good idea to consider using 'stop logic' (otherwise known as a 'kill switch') in your conditional logic in order to manually stop
@@ -1161,7 +1223,8 @@ diff --git a/Profile/user_profile.php b/Profile/user_profile.php
 index a7b19d3d..210046be 100644
 --- a/Profile/user_profile.php
 +++ b/Profile/user_profile.php
-@@ -221,29 +221,29 @@ if ($two_factor_auth_enabled && $two_factor_auth_twilio_enabled) {
+@@ -220,31 +220,31 @@ if ($two_factor_auth_enabled && $two_factor_auth_twilio_enabled) {
+ 			</tr>";
  }
  
  // Submit button (and Reset Password button, if applicable)
@@ -1192,6 +1255,7 @@ index a7b19d3d..210046be 100644
  		</div>";
  }
  // If using Two Factor auth with Google Authenticator enabled
+ if ($two_factor_auth_enabled && $two_factor_auth_authenticator_enabled) {
 diff --git a/Resources/misc/shib_table_auth_documentation/img/control_fields_mapping.png b/Resources/misc/shib_table_auth_documentation/img/control_fields_mapping.png
 new file mode 100644
 index 00000000..222ca151
