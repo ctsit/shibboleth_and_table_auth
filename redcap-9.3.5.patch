@@ -1347,11 +1347,3 @@ index 00000000..a722aad6
 +  </If>
 +</LocationMatch>
 +```
-diff --git a/Resources/sql/upgrade_9.XX.XX.sql b/Resources/sql/upgrade_9.XX.XX.sql
-new file mode 100644
-index 00000000..402561cc
---- /dev/null
-+++ b/Resources/sql/upgrade_9.XX.XX.sql
-@@ -0,0 +1,2 @@
-+-- Initialize default Shibboleth IdP entry for Shibboleth & Table Auth
-+INSERT INTO redcap_config(field_name,value) VALUES('shibboleth_table_config', '{\"splash_default\":\"non-inst-login\",\"table_login_option\":\"Use local REDCap login\",\"institutions\":[{\"login_option\":\"Shibboleth Login\",\"login_text\":\"Click the image below to login using Shibboleth\",\"login_image\":\"https:\/\/wiki.shibboleth.net\/confluence\/download\/attachments\/131074\/atl.site.logo?version=2&modificationDate=1502412080059&api=v2\",\"login_url\":\"\"}]}');
