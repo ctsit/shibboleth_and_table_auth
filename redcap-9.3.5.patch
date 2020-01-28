@@ -1,0 +1,1349 @@
+diff --git a/Classes/Authentication.php b/Classes/Authentication.php
+index cef0a651..2f6ab60d 100644
+--- a/Classes/Authentication.php
++++ b/Classes/Authentication.php
+@@ -438,30 +438,80 @@ class Authentication
+ 			} elseif (strlen($GLOBALS['shibboleth_username_field']) > 0) {
+ 				// Custom username field
+ 				$userid = $_SESSION['username'] = strtolower($_SERVER[$GLOBALS['shibboleth_username_field']]);
+ 			} else {
+ 				// Default value
+ 				$userid = $_SESSION['username'] = strtolower($_SERVER['REMOTE_USER']);
+ 			}
+ 			// Update user's "last login" time if not yet updated for this session (for Shibboleth only since we can't know when users just logged in).
+ 			// Only do this if coming from outside REDCap.
+ 			if (!isset($_SERVER['HTTP_REFERER']) || (isset($_SERVER['HTTP_REFERER'])
+ 				&& substr($_SERVER['HTTP_REFERER'], 0, strlen(APP_PATH_WEBROOT_FULL)) != APP_PATH_WEBROOT_FULL)
+ 			) {
+ 				self::setLastLoginTime($userid);
+ 			}
+ 		}
++ 		// Shibboleth and table authenitication
++         elseif ($auth_meth == 'shibboleth_table' && ($_GET['action'] != 'passwordreset') ) {
++             // TODO: create user if not exists
++             if(!isset($_SESSION['username']) || $_SESSION['username'] == null) {
++                 if ( $GLOBALS['shibboleth_username_field'] = trim($GLOBALS['shibboleth_username_field']) )
++                 // null == trim(null) if no shibboleth is setup...
++                 {
++                     if (isDev()) {
++                         // For development purposes only, allow passthru w/o valid authentication
++                         $userid = $_SESSION['username'] = 'taylorr4';
++                     } elseif (strlen($GLOBALS['shibboleth_username_field']) > 0 && $_SERVER[$GLOBALS['shibboleth_username_field']] != null) {
++                         // Does not seem to recognize null
++                         // Custom username field
++                         $userid = $_SESSION['username'] = strtolower($_SERVER[$GLOBALS['shibboleth_username_field']]);
++                     } elseif (strlen($_SERVER['REMOTE_USER']) > 0) {
++                         // Default value
++                         $userid = $_SESSION['username'] = strtolower($_SERVER['REMOTE_USER']);
++ 
++                     } else {
++                         // Choose to login via table even with shib data
++                         $userid = self::tableBasedLogin();
++                     }
++                     // Update user's "last login" time if not yet updated for this session (for Shibboleth only since we can't know when users just logged in).
++                     // Only do this if coming from outside REDCap.
++                     if (!isset($_SERVER['HTTP_REFERER']) || (isset($_SERVER['HTTP_REFERER'])
++                                 && substr($_SERVER['HTTP_REFERER'], 0, strlen(APP_PATH_WEBROOT_FULL)) != APP_PATH_WEBROOT_FULL)
++                        ) {
++                         self::setLastLoginTime($userid);
++                     }
++                 } else {
++                     //TODO: What triggers this?
++                     $userid = $_SESSION['username'];
++                     if (!$userid) {
++                         loginFunction();
++                     }
++                     self::setLastLoginTime($userid);
++                 }
++             }
++             else {
++                 // User has a session running
++                 $userid = $_SESSION['username'];
++                 // Validate table-based users
++                 if (self::isTableUser($userid)) {
++                     $userid = self::tableBasedLogin();
++                 }
++                 if (!$userid) {
++                     loginFunction();
++                 }
++             }
++         }
+ 		// SAMS authentication (specifically used by the CDC)
+ 		elseif ($auth_meth == 'sams') {
+ 			// Hack for development testing
+ 			// if (isDev() && isset($_GET['sams'])) {
+ 				// $_SERVER['HTTP_EMAIL'] = 'rob.taylor@vumc.org';
+ 				// $_SERVER['HTTP_FIRSTNAME'] = 'Rob';
+ 				// $_SERVER['HTTP_LASTNAME'] = 'Taylor';
+ 				// $_SERVER['HTTP_USERACCOUNTID'] = '0014787563';
+ 			// }
+ 			// Make sure we have all 4 HTTP headers from SAMS
+ 			$http_headers = get_request_headers();
+ 			if (isset($_SESSION['redcap_userid']) && !empty($_SESSION['redcap_userid']))
+ 			{
+ 				global $project_contact_email;
+ 				// DEBUGGING: If somehow the userid in the header changes mid-session, end the sessino and email the administrator.
+@@ -537,117 +587,31 @@ class Authentication
+ 			if (isset($_GET['openid_return_to'])) redirect(urldecode($_GET['openid_return_to']));
+ 		}
+ 		// Error was made in Control Center for authentication somehow
+ 		elseif ($auth_meth == '') {
+ 			if ($userid == '') {
+ 				// If user is navigating directing to a project page but hasn't created their account info yet, redirect to home page.
+ 				redirect(APP_PATH_WEBROOT_FULL);
+ 			} else {
+ 				// Project has no authentication somehow, which needs to be fixed in the Control Center.
+ 				exit("{$lang['config_functions_20']}
+ 					  <a target='_blank' href='". APP_PATH_WEBROOT . "ControlCenter/edit_project.php?project=".PROJECT_ID."'>REDCap {$lang['global_07']}</a>.");
+ 			}
+ 		}
+ 		// Table-based and/or LDAP authentication
+ 		else {
+-			// Set DSN arrays for Table-based auth and/or LDAP auth
+-			self::setDSNs();
+-			// This variable sets the timeout limit if server activity is idle
+-			$autologout_timer = ($autologout_timer == "") ? 0 : $autologout_timer;
+-			// In case of users having characters in password that were stripped out earlier, restore them (LDAP only)
+-			if (isset($_POST['password'])) $_POST['password'] = html_entity_decode($_POST['password'], ENT_QUOTES);
+-			// Check if user is logged in
+-			self::checkLogin("", $auth_meth);
+-
+-			// Set username variable passed from PEAR Auth
+-			$userid = strtolower($_SESSION['username']);
+-			// Check if table-based user has a temporary password. If so, direct them to page to set it.
+-			if ($auth_meth == "table" || $auth_meth == "ldap_table" || ($auth_meth == "aaf_table" && !isset($_SESSION['tli'])))//***<AAF Modification>***
+-			{
+-				$q = db_query("select * from redcap_auth where username = '".db_escape($userid)."'");
+-				$isTableBasedUser = db_num_rows($q);
+-				// User is table-based user
+-				if ($isTableBasedUser)
+-				{
+-					// Get values from auth table
+-					$temp_pwd 					= db_result($q, 0, 'temp_pwd');
+-					$password_question 			= db_result($q, 0, 'password_question');
+-					$password_answer 			= db_result($q, 0, 'password_answer');
+-					$password_question_reminder = db_result($q, 0, 'password_question_reminder');
+-					$legacy_hash 				= db_result($q, 0, 'legacy_hash');
+-					$hashed_password			= db_result($q, 0, 'password');
+-					$password_salt 				= db_result($q, 0, 'password_salt');
+-					$password_reset_key			= db_result($q, 0, 'password_reset_key');
+-
+-					// Check if need to trigger setup for SECURITY QUESTION (only on My Projects page or project's Home/Project Setup page)
+-					$myProjectsUri = "/index.php?action=myprojects";
+-					$pagePromptSetSecurityQuestion = (substr($_SERVER['REQUEST_URI'], strlen($myProjectsUri)*-1) == $myProjectsUri || PAGE == 'index.php' || PAGE == 'ProjectSetup/index.php');
+-					$conditionPromptSetSecurityQuestion = (!($two_factor_auth_enabled && !isset($_SESSION['two_factor_auth']) && !isset($_SESSION['two_factor_auth_bypass_login']))
+-							&& !isset($_POST['redcap_login_a38us_09i85']) && !$isAjax && empty($password_question)
+-							&& (empty($password_question_reminder) || NOW > $password_question_reminder));
+-					if ($pagePromptSetSecurityQuestion && $conditionPromptSetSecurityQuestion)
+-					{
+-						// Set flag to display pop-up dialog to set up security question
+-						define("SET_UP_SECURITY_QUESTION", true);
+-					}
+-
+-					// If using table-based auth and enforcing password reset after X days, check if need to reset or not
+-					if (isset($_POST['redcap_login_a38us_09i85']) && !empty($password_reset_duration))
+-					{
+-						// Also add to auth_history table
+-						$sql = "select timestampdiff(MINUTE,timestamp,'".NOW."')/60/24 as daysExpired,
+-								timestampadd(DAY,$password_reset_duration,timestamp) as expirationTime from redcap_auth_history
+-								where username = '$userid' order by timestamp desc limit 1";
+-						$q = db_query($sql);
+-						$daysExpired = db_result($q, 0, "daysExpired");
+-						$expirationTime = db_result($q, 0, "expirationTime");
+-
+-						// If the number of days expired has passed, then redirect them to the password reset page
+-						if (db_num_rows($q) > 0 && $daysExpired > $password_reset_duration)
+-						{
+-							// Set the temp password flag to prompt them to enter new password
+-							db_query("UPDATE redcap_auth SET temp_pwd = 1 WHERE username = '$userid'");
+-							// Redirect to password reset page with flag set
+-							redirect(APP_PATH_WEBROOT . "Authentication/password_reset.php?msg=expired");
+-						}
+-						// If within 7 days of expiring, then give a notice on next page load.
+-						elseif ($daysExpired > $password_reset_duration-7)
+-						{
+-							// Put expiration time in session in order to prompt user on next page load
+-							$_SESSION['expire_time'] = DateTimeRC::format_ts_from_ymd($expirationTime);
+-						}
+-					}
+-
+-					// PASSWORD RESET (non-email): If temporary password flag is set, then redirect to allow user to set new password
+-					if ($temp_pwd == '1' && PAGE != "Authentication/password_reset.php")
+-					{
+-						redirect(APP_PATH_WEBROOT . "Authentication/password_reset.php" . ((isset($app_name) && $app_name != "") ? "?pid=" . PROJECT_ID : ""));
+-					}
+-
+-					// UPDATE LEGACY PASSWORD HASH: If table-based user is logging in (successfully) and is using a legacy hashed password,
+-					// then update password to newer salted hash.
+-					if (isset($_POST['redcap_login_a38us_09i85']) && $legacy_hash && md5($_POST['password'].$password_salt) == $hashed_password)
+-					{
+-						// Generate random salt for this user
+-						$new_salt = self::generatePasswordSalt();
+-						// Create the one-way hash for this new password
+-						$new_hashed_password = self::hashPassword($_POST['password'], $new_salt);
+-						// Update a table-based user's hashed password and salt
+-						self::setUserPasswordAndSalt($userid, $new_hashed_password, $new_salt);
+-					}
+-				}
+-			}
++            $userid = self::tableBasedLogin();
+ 		}
+ 
+ 		// Reset autoload function in case one of the authentication frameworks changed it
+ 		spl_autoload_register($rc_autoload_function);
+ 
+ 		// If $userid is somehow blank (e.g., authentication server is down), then prevent from accessing.
+ 		if (trim($userid) == '')
+ 		{
+ 			// If using Shibboleth authentication and user is on API Help page but somehow lost their username
+ 			// (or can't be used in /api directory due to Shibboleth setup), then just redirect to the target page itself.
+ 			if ($auth_meth == 'shibboleth' && strpos(PAGE_FULL, '/api/help/index.php') !== false) {
+ 				redirect(APP_PATH_WEBROOT . "API/help.php");
+ 			}
+ 			// Display error message
+ 			$objHtmlPage = new HtmlPage();
+@@ -836,30 +800,125 @@ class Authentication
+ 		if (self::enforceTwoFactorByManualForceProject()) {
+ 			// Display the two-factor login screen
+ 			self::renderTwoFactorLoginPage(true);
+ 		}
+ 		// If user bypassed the 2FA login (due to cookie or IP), then make sure their 1-step login
+ 		// got logged (because we didn't log it when it happened prior to 2FA detection)
+ 		if ($auth_meth != 'none' && $two_factor_auth_enabled && !isset($_SESSION['two_factor_auth'])
+ 			&& !isset($_SESSION['two_factor_auth_bypass_login']) && !in_array(PAGE, self::getTwoFactorWhitelistedPages())) {
+ 			// Set flag so that we know we logged their 1-step login
+ 			$_SESSION['two_factor_auth_bypass_login'] = "1";
+ 			// Log the login
+ 			Logging::logPageView("LOGIN_SUCCESS", USERID, null, true);
+ 		}
+ 	}
+ 
++    static function tableBasedLogin() {
++		global $auth_meth, $app_name, $username, $password, $hostname, $db, $institution, $double_data_entry,
++			   $project_contact_name, $autologout_timer, $lang, $isMobileDevice, $password_reset_duration, $enable_user_whitelist,
++			   $homepage_contact_email, $homepage_contact, $isAjax, $rc_autoload_function, $two_factor_auth_enabled,
++               $isTableBasedUser;
++			// Set DSN arrays for Table-based auth and/or LDAP auth
++			self::setDSNs();
++			// This variable sets the timeout limit if server activity is idle
++			$autologout_timer = ($autologout_timer == "") ? 0 : $autologout_timer;
++			// In case of users having characters in password that were stripped out earlier, restore them (LDAP only)
++			if (isset($_POST['password'])) $_POST['password'] = html_entity_decode($_POST['password'], ENT_QUOTES);
++			// Check if user is logged in
++			self::checkLogin("", $auth_meth);
++
++			// Set username variable passed from PEAR Auth
++			$userid = strtolower($_SESSION['username']);
++			// Check if table-based user has a temporary password. If so, direct them to page to set it.
++			if ($auth_meth == "table" || $auth_meth == "ldap_table" || $auth_meth == "shibboleth_table" || ($auth_meth == "aaf_table" && !isset($_SESSION['tli'])))//***<AAF Modification>***
++			{
++				$q = db_query("select * from redcap_auth where username = '".db_escape($userid)."'");
++				$isTableBasedUser = db_num_rows($q);
++				// User is table-based user
++				if ($isTableBasedUser)
++				{
++					// Get values from auth table
++					$temp_pwd 					= db_result($q, 0, 'temp_pwd');
++					$password_question 			= db_result($q, 0, 'password_question');
++					$password_answer 			= db_result($q, 0, 'password_answer');
++					$password_question_reminder = db_result($q, 0, 'password_question_reminder');
++					$legacy_hash 				= db_result($q, 0, 'legacy_hash');
++					$hashed_password			= db_result($q, 0, 'password');
++					$password_salt 				= db_result($q, 0, 'password_salt');
++					$password_reset_key			= db_result($q, 0, 'password_reset_key');
++
++					// Check if need to trigger setup for SECURITY QUESTION (only on My Projects page or project's Home/Project Setup page)
++					$myProjectsUri = "/index.php?action=myprojects";
++					$pagePromptSetSecurityQuestion = (substr($_SERVER['REQUEST_URI'], strlen($myProjectsUri)*-1) == $myProjectsUri || PAGE == 'index.php' || PAGE == 'ProjectSetup/index.php');
++					$conditionPromptSetSecurityQuestion = (!($two_factor_auth_enabled && !isset($_SESSION['two_factor_auth']) && !isset($_SESSION['two_factor_auth_bypass_login']))
++							&& !isset($_POST['redcap_login_a38us_09i85']) && !$isAjax && empty($password_question)
++							&& (empty($password_question_reminder) || NOW > $password_question_reminder));
++					if ($pagePromptSetSecurityQuestion && $conditionPromptSetSecurityQuestion)
++					{
++						// Set flag to display pop-up dialog to set up security question
++						define("SET_UP_SECURITY_QUESTION", true);
++					}
++
++					// If using table-based auth and enforcing password reset after X days, check if need to reset or not
++					if (isset($_POST['redcap_login_a38us_09i85']) && !empty($password_reset_duration))
++					{
++						// Also add to auth_history table
++						$sql = "select timestampdiff(MINUTE,timestamp,'".NOW."')/60/24 as daysExpired,
++								timestampadd(DAY,$password_reset_duration,timestamp) as expirationTime from redcap_auth_history
++								where username = '$userid' order by timestamp desc limit 1";
++						$q = db_query($sql);
++						$daysExpired = db_result($q, 0, "daysExpired");
++						$expirationTime = db_result($q, 0, "expirationTime");
++
++						// If the number of days expired has passed, then redirect them to the password reset page
++						if (db_num_rows($q) > 0 && $daysExpired > $password_reset_duration)
++						{
++							// Set the temp password flag to prompt them to enter new password
++							db_query("UPDATE redcap_auth SET temp_pwd = 1 WHERE username = '$userid'");
++							// Redirect to password reset page with flag set
++							redirect(APP_PATH_WEBROOT . "Authentication/password_reset.php?msg=expired");
++						}
++						// If within 7 days of expiring, then give a notice on next page load.
++						elseif ($daysExpired > $password_reset_duration-7)
++						{
++							// Put expiration time in session in order to prompt user on next page load
++							$_SESSION['expire_time'] = DateTimeRC::format_ts_from_ymd($expirationTime);
++						}
++					}
++
++					// PASSWORD RESET (non-email): If temporary password flag is set, then redirect to allow user to set new password
++					if ($temp_pwd == '1' && PAGE != "Authentication/password_reset.php")
++					{
++						redirect(APP_PATH_WEBROOT . "Authentication/password_reset.php" . ((isset($app_name) && $app_name != "") ? "?pid=" . PROJECT_ID : ""));
++					}
++
++					// UPDATE LEGACY PASSWORD HASH: If table-based user is logging in (successfully) and is using a legacy hashed password,
++					// then update password to newer salted hash.
++					if (isset($_POST['redcap_login_a38us_09i85']) && $legacy_hash && md5($_POST['password'].$password_salt) == $hashed_password)
++					{
++						// Generate random salt for this user
++						$new_salt = self::generatePasswordSalt();
++						// Create the one-way hash for this new password
++						$new_hashed_password = self::hashPassword($_POST['password'], $new_salt);
++						// Update a table-based user's hashed password and salt
++						self::setUserPasswordAndSalt($userid, $new_hashed_password, $new_salt);
++					}
++				}
++			}
++        return $userid;
++    }
++
+ 	//***<AAF Modification>*** Adds new user who has come through AAF
+ 	static function recordNewAAFUser($un1,$aafMap)
+ 	{
+ 		global $allow_create_db_default, $default_datetime_format, $default_number_format_decimal, $default_number_format_thousands_sep, $aafAllowLocalsCreateDB,$aafDisplayOnEmailUsers,$aafScopeTarget;
+ 		$db = new RedCapDB();
+ 		$ui_id=null;
+ 		$_POST['username'] = trim(strip_tags(label_decode($un1)));
+ 		$_POST['user_firstname'] = trim(strip_tags(label_decode($aafMap->givenname)));
+ 		$_POST['user_lastname'] = trim(strip_tags(label_decode($aafMap->surname)));
+ 		$_POST['user_email'] = trim(strip_tags(label_decode($aafMap->mail)));
+ 		$_POST['user_inst_id'] = $aafMap->edupersontargetedid;
+ 		$display_on_email_users= ($aafDisplayOnEmailUsers== "on") ? 1 : 0;
+ 		$allow_create_db=$allow_create_db_default;
+ 		if($aafAllowLocalsCreateDB=='on' && isset($aafScopeTarget) && isset($aafMap->edupersonscopedaffiliation) && strpos($aafMap->edupersonscopedaffiliation,$aafScopeTarget)>-1){
+ 			$allow_create_db=1; //allowing the locals to create db
+@@ -1770,31 +1829,31 @@ class Authentication
+ 		
+ 		// Log the failed login
+ 		Logging::logPageView("LOGIN_FAIL", $failedUsernameEntered);
+ 
+ 		$GLOBALS['authFail'] = 0;
+ 		$a->start();
+ 		return 1;
+ 	}
+ 	
+ 	// Build and return the DSN array used for Table-based, LDAP-Table, and LDAP authentication
+ 	public static function buildDsnArray()
+ 	{
+ 		global $auth_meth, $mysqldsn, $ldapdsn;
+ 		$dsn = array();
+ 		// Auth includes Table
+-		if ($auth_meth == "ldap_table" || $auth_meth == "table" || ($auth_meth == "aaf_table" && !isset($_SESSION['tli'])))
++		if ($auth_meth == "ldap_table" || $auth_meth == "table" || ( $auth_meth == "shibboleth_table"  ) || ($auth_meth == "aaf_table" && !isset($_SESSION['tli'])))
+         {
+             $dsn[] = array('type'=>'DB', 'dsnstuff'=>$mysqldsn);
+         }
+         // Auth includes LDAP
+ 		if ($auth_meth == "ldap_table" || $auth_meth == "ldap")
+ 		{
+ 			if (is_array(end($ldapdsn))) {
+ 				// Loop through all LDAP configs and add 
+ 				foreach ($ldapdsn as $this_ldapdsn) {
+ 					$dsn[] = array('type'=>'LDAP', 'dsnstuff'=>$this_ldapdsn);
+ 				}
+ 			} else {
+ 				// Add single LDAP config                
+ 				$dsn[] = array('type'=>'LDAP', 'dsnstuff'=>$ldapdsn);
+ 			}
+@@ -1826,31 +1885,31 @@ class Authentication
+ 	{
+ 		global $auth_meth;
+ 		if (isset($_GET['logout']) && $_GET['logout'])
+ 		{
+ 			// Log the logout
+ 			Logging::logPageView("LOGOUT", $_SESSION['username']);
+ 			// Destroy session and erase userid
+ 			$_SESSION = array();
+ 			session_unset();
+ 			session_destroy();
+ 			deletecookie('PHPSESSID');
+ 			// Default value (remove 'logout' from query string, if exists)
+ 			$logoutRedirect = str_replace(array("logout=1&","&logout=1","logout=1","&amp;"), array("","","","&"), $_SERVER['REQUEST_URI']);
+ 			if (substr($logoutRedirect, -1) == '&' || substr($logoutRedirect, -1) == '?') $logoutRedirect = substr($logoutRedirect, 0, -1);
+ 			// If using Shibboleth, redirect to Shibboleth logout page
+-			if ($auth_meth == 'shibboleth' && strlen($GLOBALS['shibboleth_logout']) > 0) {
++			if ( ( $auth_meth == 'shibboleth_table' || $auth_meth == 'shibboleth' ) && strlen($GLOBALS['shibboleth_logout']) > 0) {
+ 				$logoutRedirect = $GLOBALS['shibboleth_logout'];
+ 			}
+ 			// If using SAMS, redirect to SAMS logout page
+ 			elseif ($auth_meth == 'sams' && strlen($GLOBALS['sams_logout']) > 0) {
+ 				$logoutRedirect = $GLOBALS['sams_logout'];
+ 			}
+ 			// Reload same page or redirect to login page
+ 			redirect($logoutRedirect);
+ 		}
+ 	}
+ 
+ 
+ 	/**
+ 	 * SEARCH REDCAP_AUTH TABLE FOR USER (return boolean)
+ 	 */
+diff --git a/Config/init_functions.php b/Config/init_functions.php
+index 7c53654b..d500fcc2 100644
+--- a/Config/init_functions.php
++++ b/Config/init_functions.php
+@@ -390,31 +390,31 @@ function loginFunction()
+ 	$passwordLabel = $lang['global_32'].$lang['colon'];
+ 	$passwordTextRight = "";
+ 	$rsaLogo = "";
+ 	if ($auth_meth == 'rsa') {
+ 		$rsaLogo =  RCView::div(array('style'=>'text-align:center;padding-bottom:15px;'),
+ 						RCView::img(array('src'=>'securid2.gif'))
+ 					);
+ 		$passwordLabel = $lang['global_82'].$lang['colon'];
+ 		$passwordTextRight = RCView::div(array('style'=>'color:#800000;font-size:13px;margin:4px 0;text-align:right;'),
+ 								$lang['config_functions_92']
+ 							 );
+ 	}
+ 
+ 	// Set "forgot password?" link
+ 	$forgotPassword = "";
+-	if ($auth_meth == "table" || $auth_meth == "ldap_table" || strpos($auth_meth,'aaf')>-1) { //***<AAF Modification>***
++	if ($auth_meth == "table" || $auth_meth == "ldap_table" || strpos($auth_meth,'aaf')>-1 || $auth_meth == "shibboleth_table" ) { //***<AAF Modification>***
+ 		$forgotPassword = RCView::div(array("style"=>"float:right;margin-top:10px;margin-right:10px;"),
+ 							RCView::a(array("style"=>"font-size:11px;text-decoration:underline;","href"=>APP_PATH_WEBROOT."Authentication/password_recovery.php"), $lang['pwd_reset_41'])
+ 						  );
+ 	}
+ 
+ 	// REDCap Hook injection point: Pass PROJECT_ID constant (if defined).
+ 	Hooks::call('redcap_every_page_before_render', (defined("PROJECT_ID") ? array(PROJECT_ID) : array()));
+ 
+ 	// Display the Login Form
+ 	$objHtmlPage = new HtmlPage();
+ 	$objHtmlPage->addExternalJS(APP_PATH_JS . "base.js");
+ 	$objHtmlPage->addStylesheet("jquery-ui.min.css", 'screen,print');
+ 	$objHtmlPage->addStylesheet("style.css", 'screen,print');
+ 	$objHtmlPage->addStylesheet("home.css", 'screen,print');
+ 	$objHtmlPage->PrintHeader();
+@@ -454,31 +454,172 @@ function loginFunction()
+ 			<!-- nav tabs -->
+ 			<ul class="nav nav-tabs" role="tablist">
+ 				<li role="presentation" class="nav-item"><a href="#inst-login" class="nav-link active" data-toggle="tab" aria-controls="inst-login" role="tab" data-toggle="tab">Institutional login</a>
+ 				</li>
+ 				<li role="presentation" class="nav-item"><a href="#non-inst-login" class="nav-link" data-toggle="tab" aria-controls="non-inst-login" role="tab" data-toggle="tab">Non institutional login</a>
+ 				</li>
+ 			</ul>
+ 
+ 			<!-- tab panes -->
+ 			<div class="tab-content">
+ 				<div role="tabpanel" class="tab-pane active" id="inst-login">
+ 					<p>If your institution (for example an Australian University, Health or research institution) is a member of the Australian Access Federation click on the AAF graphic below.</p>
+ 					<p><a href='<?php echo $GLOBALS['aafAccessUrl']; ?>'><img src='https://rapid.aaf.edu.au/aaf_service_223x54.png'/></a></p>
+ 				</div>
+ 				<div role="tabpanel" class="tab-pane" id="non-inst-login">
+-					<p>If you aren't a member of the Australian Access Federation, fill in your login details below.</p>
++					<p>If you aren&#39;t a member of the Australian Access Federation, fill in your login details below.</p>
++		<?php
++	}
++	if ($auth_meth == 'shibboleth_table')
++	{
++        $shibboleth_table_config = json_decode($GLOBALS['shibboleth_table_config'], TRUE);
++        $first_shib_data = $shibboleth_table_config['institutions'][0];
++
++        ?>
++        <div>
++            <!-- nav tabs -->
++            <style>
++                .nav-tabs {
++                    background-color: #f8f8f8;
++                    padding: none;
++                }
++                .nav-tabs a {
++                    padding: 10px;
++                    text-decoration: none !important;
++                    display: block;
++                }
++                .nav-tabs li a:hover {
++                    text-decoration: none !important;
++                }
++                .nav-tabs li:hover a:hover {
++                background-color: #e7e7e7;
++                }
++
++                /* The following modifiers would be redundant with the JS below
++                but the li element for the default login must be selected
++                li:active, a:active {
++                background-color: #e7e7e7;
++                }
++                li:focus, a:focus {
++                background-color: #e7e7e7;
++                }
++                */
++                /* The CSS relational pseudo-class "has" is not enabled yet
++                once usable, it can replace the CSS altering js functions below
++                .active li:has(> a[aria-selected="true"]) {
++                background-color: #e7e7e7;
++                }
++                */
++            </style>
++
++            <script>
++            const shibTableConfig = <?php echo $GLOBALS["shibboleth_table_config"]; ?>;
++            const defaultShibUrl = '<?php echo $_SERVER['Shib-Handler'] . "/Login?target=" . $_SERVER['REQUEST_URI']; ?>';
++            const repeatShibParams = shibTableConfig.institutions;
++            const shibIdPs = repeatShibParams.length;
++
++            function appendShibOptions() {
++                // Fill the login pane for each Shibboleth login option
++                for (let i = 1; i < shibIdPs; i++) {
++                    const thisShib = repeatShibParams[i];
++
++                    // Fill the tab selectors for each Shibboleth login option
++                    const text = thisShib['login_option'];
++                    const tabOption = $('#shib_login_tab' + (i - 1)).last();
++                    var nextTabOption = tabOption.clone();
++                    nextTabOption.insertAfter(tabOption);
++                    nextTabOption.attr('id', 'shib_login_tab' + i);
++                    nextTabOption.find('a').text(text)
++                                 .attr('href', '#inst-login' + i)
++                                 .attr('aria-controls', 'inst-login' + i);
++
++                    // Remove the tab title data to not clash with appendShibPaneOptions
++                    delete thisShib['login_option'];
++
++                    // Handle panes
++                    const paneOption = $('#inst-login0.tab-pane');
++                    var nextPaneOption = paneOption.clone();
++                    nextPaneOption.insertAfter(paneOption);
++                    nextPaneOption.attr('id', 'inst-login' + i);
++
++                    for (const param of Object.keys(thisShib)) {
++                        const paramValue = thisShib[param];
++                        let paramTargetElement = nextPaneOption.find('#' + param);
++                        switch(param) {
++                            case 'login_text':
++                                paramTargetElement.text(paramValue);
++                                break;
++                            case 'login_url':
++                                paramTargetElement.attr('href', (paramValue !== '') ? paramValue : defaultShibUrl);
++                                break;
++                            case 'login_image':
++                                paramTargetElement.attr('src', paramValue);
++                                break;
++                            default:
++                                paramTargetElement.text(paramValue);
++                        }
++                    }
++                }
++            }
++
++            $(document).ready(function() {
++                appendShibOptions();
++
++                // Activate login pane according to default
++                const defaultSelection = '<?php echo $shibboleth_table_config['splash_default']; ?>';
++                document.getElementById(defaultSelection)
++                        .setAttribute('class', 'tab-pane active');
++                // Add selected styling to li element for default
++                document.querySelector('[aria-controls="' + defaultSelection + '"]')
++                        // .setAttribute('aria-selected', 'true'); // this is set on click but appears to do nothing; prevents function chaining
++                        .parentElement.setAttribute('style', 'background-color: #e7e7e7; text-decoration: none;');
++                //  TODO: change the above to pure css now that the element properties are being updated in js
++
++                // Change tab appearance after click
++                $('.nav li').on('click', function(event) {
++                    $('.nav li').css('background-color','#f8f8f8');
++                    $(this).css('background-color','#e7e7e7');
++                });
++            });
++            </script>
++
++			<ul class="nav nav-tabs" role="tablist">
++                <li role="presentation" class="active">
++                    <a href="#non-inst-login" aria-controls="non-inst-login" role="tab" data-toggle="tab">
++                        <?php echo $shibboleth_table_config['table_login_option']; ?>
++                    </a>
++                </li>
++                <li role="presentation" class="active" id="shib_login_tab0">
++                    <a href="#inst-login0" aria-controls="inst-login0" role="tab" data-toggle="tab">
++                        <?php echo $first_shib_data['login_option']; ?>
++                    </a>
++                </li>
++			</ul>
++
++			<!-- tab panes -->
++			<div class="tab-content">
++				<div role="tabpanel" class="tab-pane" id="inst-login0">
++                    <p id='login_text'>
++                        <?php echo $first_shib_data['login_text']; ?>
++                    </p>
++                    <p>
++                        <a id='login_url' href='<?php echo ( $first_shib_data['login_url'] ) ?: $_SERVER['Shib-Handler'] . '/Login?target=' . $_SERVER['REQUEST_URI']; ?>'>
++                            <img id='login_image' src='<?php echo $first_shib_data['login_image']; ?>'/>
++                        </a>
++                    </p>
++                </div>
++				<div role="tabpanel" class="tab-pane" id="non-inst-login">
+ 		<?php
+ 	}
+ 
+ 	// Login instructions (default)
+ 	print  "<p style='font-size:13px;'>
+ 				{$lang['config_functions_67']}
+ 				<a style='font-size:13px;text-decoration:underline;' href=\"".
+ 				(trim($homepage_contact_url) == '' ? "mailto:$homepage_contact_email" : trim($homepage_contact_url)) .
+ 				"\">$homepage_contact</a>{$lang['period']}
+ 			</p>
+ 			<br>";
+ 
+ 	// Sanitize action URL for login form
+ 	$loginFormActionUrl = js_escape(str_replace('`', '', $_SERVER['REQUEST_URI']));
+ 	// Give extra room for non-English languages
+@@ -1675,30 +1816,35 @@ function checkUserPassword($username, $password, $authSessionName = "login_test"
+ 	$_POST['username'] = $username;
+ 
+ 	// Get current session_id, which will get inevitably changed if auth is successful
+ 	$old_session_id = substr(session_id(), 0, 32);
+ 
+ 	// Defaults
+ 	$authenticated = false;	
+ 
+ 	// Build and return the DSN array used for Table-based, LDAP-Table, and LDAP authentication
+ 	$dsn = Authentication::buildDsnArray();
+ 
+ 	//if ldap and table authentication Loop through the available servers & authentication methods
+ 	foreach ($dsn as $key=>$dsnvalue)
+ 	{
+ 		if (isset($a)) unset($a);
++
++        // shibboleth_table does not load this library when attempting to esign a form
++        // System::init() does load this, but for reasons unknown, it is forgotten
++        if (!class_exists('Auth')) require_once dirname(dirname(__FILE__)) . '/Libraries/PEAR/Auth.php';
++
+ 		$a = new Auth($dsnvalue['type'], $dsnvalue['dsnstuff'], "fakeUserLoginForm");
+ 		$a->setSessionName($authSessionName);
+ 		// Table-based authentication hack during login to bypass Pear DB because of SSL compatibility reasons with "MySQL over SSL"
+ 		if ($dsnvalue['type'] == 'DB' && Authentication::verifyTableUsernamePassword($_POST['username'], $_POST['password']))
+ 		{
+ 			$a->setAuth($_POST['username']);
+ 		}
+ 		// Start auth
+ 		$a->start();
+ 		if ($a->getAuth()) {
+ 			$authenticated = true;
+ 		}
+ 	}
+ 
+ 	// Now that we're done, remove this part of the session to prevent conflict with REDCap user sessioning
+diff --git a/ControlCenter/create_user.php b/ControlCenter/create_user.php
+index 6bc37b57..a7c0e2d3 100644
+--- a/ControlCenter/create_user.php
++++ b/ControlCenter/create_user.php
+@@ -157,31 +157,31 @@ if (isset($_POST['username']) && isset($_POST['user_firstname']) && isset($_POST
+ }
+ 
+ 
+ 
+ 
+ // Page header, instructions, and tabs
+ if ($ui_id) {
+ 	// Edit user info
+ 	print RCView::h4(array('style'=>'margin-top:0;'), $lang['control_center_239']) .
+ 		  RCView::p(array(), $lang['control_center_244']);
+ } else {
+ 	// Add new user
+ 	print 	RCView::h4(array('style' => 'margin-top: 0;'), $lang['control_center_4427']) .
+ 			RCView::p(array('style'=>'margin-bottom:20px;'), $lang['control_center_411']);
+ 	// If not using auth_meth of none, table, or ldap_table, the don't display page
+-	if (!in_array($auth_meth_global, array('none', 'table', 'ldap_table','aaf_table'))) { //***<AAF Modification>***
++	if (!in_array($auth_meth_global, array('none', 'table', 'ldap_table','aaf_table', 'shibboleth_table'))) { //***<AAF Modification>***
+ 		print 	RCView::p(array('class'=>'yellow', 'style'=>'margin-bottom:20px;'),
+ 					RCView::img(array('src'=>'exclamation_orange.png')) .
+ 					RCView::b($lang['global_03'].$lang['colon'])." " .$lang['control_center_4401']
+ 				);
+ 		include 'footer.php';
+ 		exit;
+ 	}
+ 	// Display dashboard of table-based users that are on the old MD5 password hashing.
+ 	print User::renderDashboardPasswordHashProgress();
+ 	// Tabs
+ 	$tabs = array('ControlCenter/create_user.php'=>'<i class="fas fa-user-plus" style="padding-bottom: 3px;"></i> ' . $lang['control_center_409'],
+ 				  'ControlCenter/create_user_bulk.php'=>RCView::img(array('src'=>'xls2.png')) . $lang['control_center_410']);
+ 	RCView::renderTabs($tabs);
+ 	print 	RCView::p(array(), $lang['control_center_43']);
+ }
+diff --git a/ControlCenter/edit_project.php b/ControlCenter/edit_project.php
+index d44758ae..f45f3d0d 100644
+--- a/ControlCenter/edit_project.php
++++ b/ControlCenter/edit_project.php
+@@ -132,30 +132,31 @@ if (isset($_GET['project']) && is_numeric($_GET['project']))
+ 			<?php echo $lang['project_settings_06'] ?>
+ 		</td>
+ 		<td class="cc_data">
+ 			<select class="x-form-text x-form-field" style="" name="auth_meth">
+ 				<option value='none' <?php echo ($element_data['auth_meth'] == "none" ? "selected" : "") ?>><?php echo $lang['system_config_08'] ?></option>
+ 				<option value='table' <?php echo ($element_data['auth_meth'] == "table" ? "selected" : "") ?>><?php echo $lang['system_config_09'] ?></option>
+ 				<option value='ldap' <?php echo ($element_data['auth_meth'] == "ldap" ? "selected" : "") ?>>LDAP</option>
+ 				<option value='ldap_table' <?php echo ($element_data['auth_meth'] == "ldap_table" ? "selected" : "") ?>>LDAP & <?php echo $lang['system_config_09'] ?></option>
+ 				<option value='shibboleth' <?php echo ($element_data['auth_meth'] == "shibboleth" ? "selected" : "") ?>>Shibboleth</option>
+ 				<option value='openid_google' <?php echo ($element_data['auth_meth'] == "openid_google" ? "selected" : "") ?>>Google OAuth2</option>
+ 				<option value='rsa' <?php echo ($element_data['auth_meth'] == "rsa" ? "selected" : "") ?>>RSA SecurID (two-factor authentication)</option>
+ 				<option value='openid' <?php echo ($element_data['auth_meth'] == "openid" ? "selected" : "") ?>>OpenID</option>
+ 				<option value='sams' <?php echo ($element_data['auth_meth'] == "sams" ? "selected" : "") ?>>SAMS (for CDC)</option>
+                 <option value='aaf' <?php echo ($element_data['auth_meth'] == "aaf" ? "selected" : "") ?>>AAF (Australian Access Federation)</option>
+ 				<option value='aaf_table' <?php echo ($element_data['auth_meth'] == "aaf_table" ? "selected" : "") ?>>AAF (Australian Access Federation) & <?php echo $lang['system_config_09'] ?></option>
++                <option value='shibboleth_table' <?php echo ($element_data['auth_meth'] == "shibboleth_table" ? "selected" : "") ?>>Shibboleth & <?php echo $lang['system_config_09'] ?></option>
+ 			</select>
+ 			<div class="cc_info" style="font-weight:normal;">
+ 				<?php echo $lang['system_config_222'] ?>
+ 				<a href="https://community.projectredcap.org/articles/691/authentication-how-to-change-and-set-up-authentica.html" target="_blank" style="text-decoration:underline;"><?php echo $lang['system_config_223'] ?></a><?php echo $lang['system_config_224'] ?>
+ 			</div>
+ 		</td>
+ 	</tr>
+ 	<tr  id="project_language-tr" sq_id="project_language">
+ 		<td class="cc_label"><?php echo $lang['system_config_90'] ?></td>
+ 		<td class="cc_data">
+ 			<select class="x-form-text x-form-field" style="" name="project_language">
+ 				<?php
+ 				$languages = Language::getLanguageList();
+ 				foreach ($languages as $language) {
+ 					$selected = ($element_data['project_language'] == $language) ? "selected" : "";
+diff --git a/ControlCenter/header.php b/ControlCenter/header.php
+index e7c063ec..ce054a72 100644
+--- a/ControlCenter/header.php
++++ b/ControlCenter/header.php
+@@ -73,31 +73,31 @@ hr { border-top: 1px solid #ccc; }
+ <div class="row">
+ 
+ 	<?php	
+ 	// Get count of pending To-Do List items
+ 	$todoListItemsPending = ToDoList::getTotalNumberRequestsByStatus('pending') + ToDoList::getTotalNumberRequestsByStatus('low-priority');
+ 	$todoListItemsPendingBadge = ($todoListItemsPending > 0) ? " <span class='badgerc'>$todoListItemsPending</span>" : "";
+ 	?>
+ 
+ 	<div id="control_center_menu" class="d-none d-md-block col-md-4 col-lg-3" role="navigation">
+ 		
+ 		<!-- ACCOUNT MANAGER TOOLS -->
+ 		<?php if (ACCOUNT_MANAGER) { ?>
+ 		<div class="cc_menu_section">
+ 			<div class="cc_menu_header"><?php echo $lang['control_center_4581'] ?></div>
+ 			<div class="cc_menu_item"><img src="<?php echo APP_PATH_IMAGES ?>users3.png">&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/view_users.php"><?php echo $lang['control_center_109'] ?></a></div>
+-			<?php if (in_array($auth_meth_global, array('none', 'table', 'ldap_table','aaf_table'))) { ?>
++			<?php if (in_array($auth_meth_global, array('none', 'table', 'ldap_table','aaf_table','shibboleth_table'))) { ?>
+ 				<div class="cc_menu_item"><img src="<?php echo APP_PATH_IMAGES ?>user_add3.png">&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/create_user.php"><?php echo $lang['control_center_4570'] ?></a></div>
+ 			<?php } ?>
+ 			<div class="cc_menu_item"><img src="<?php echo APP_PATH_IMAGES ?>user_list.png">&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/user_white_list.php"><?php echo $lang['control_center_162'] ?></a></div>
+ 			<div class="cc_menu_item"><img src="<?php echo APP_PATH_IMAGES ?>email_go.png">&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/email_users.php"><?php echo $lang['email_users_02'] ?></a></div>
+ 		</div>
+ 		<?php } else { ?>
+ 		
+ 		<!-- REDCap Home Page and My Projects links (mobile view only) -->
+ 		<div class="cc_menu_section d-block d-sm-none col-12">
+ 			<div class="cc_menu_item"><i class='fas fa-home'></i>&nbsp; <a href="<?php echo APP_PATH_WEBROOT_PARENT ?>"><?php echo $lang['control_center_4531'] ?></a></div>
+ 			<div class="cc_menu_item"><i class="far fa-list-alt"></i>&nbsp; <a href="<?php echo APP_PATH_WEBROOT_PARENT ?>index.php?action=myprojects"><?php echo $lang['home_22'] ?></a></div>
+             <div class="cc_menu_divider"></div>
+         </div>
+ 		
+ 		<!-- Control Center Home -->
+@@ -132,31 +132,31 @@ hr { border-top: 1px solid #ccc; }
+ 		<div class="cc_menu_divider"></div>
+ 		
+ 		<!-- Projects -->
+ 		<div class="cc_menu_section">
+ 			<div class="cc_menu_header"><?php echo $lang['control_center_134'] ?></div>
+ 			<div class="cc_menu_item"><i class="fas fa-layer-group"></i>&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/view_projects.php"><?php echo $lang['control_center_110'] ?></a></div>
+             <div class="cc_menu_item"><i class="fas fa-edit" style="margin-left:1px;margin-right:1px;"></i> <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/edit_project.php"><?php echo $lang['control_center_4396'] ?></a></div>
+             <div class="cc_menu_item"><i class="fas fa-link"></i>&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/survey_link_lookup.php"><?php echo $lang['control_center_4702'] ?></a></div>
+         </div>
+         <div class="cc_menu_divider"></div>
+ 		
+ 		<!-- Users -->
+ 		<div class="cc_menu_section">
+ 			<div class="cc_menu_header"><?php echo $lang['control_center_132'] ?></div>
+ 			<div class="cc_menu_item"><i class="fas fa-user-friends"></i>&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/view_users.php"><?php echo $lang['control_center_109'] ?></a></div>
+-			<?php if (in_array($auth_meth_global, array('none', 'table', 'ldap_table','aaf_table'))) { ?>
++			<?php if (in_array($auth_meth_global, array('none', 'table', 'ldap_table','aaf_table','shibboleth_table'))) { ?>
+ 				<div class="cc_menu_item"><i class="fas fa-user-plus"></i>&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/create_user.php"><?php echo $lang['control_center_4570'] ?></a></div>
+ 			<?php } ?>
+ 			<div class="cc_menu_item"><i class="fas fa-user-check"></i>&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/user_white_list.php"><?php echo $lang['control_center_162'] ?></a></div>
+ 			<div class="cc_menu_item"><i class="fas fa-envelope"></i>&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/email_users.php"><?php echo $lang['email_users_02'] ?></a></div>
+ 			<div class="cc_menu_item"><i class="fas fa-coins"></i>&nbsp; <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/user_api_tokens.php"><?php echo $lang['control_center_245'] ?></a></div>
+ 			<div class="cc_menu_item"><i class="fas fa-user-shield"></i> <a href="<?php echo APP_PATH_WEBROOT ?>ControlCenter/superusers.php"><?php echo $lang['control_center_4572'] ?></a></div>
+ 		</div>
+ 		<div class="cc_menu_divider"></div>
+ 		
+ 		<!-- Technical / Developer Tools -->
+ 		<div class="cc_menu_section">
+ 			<div class="cc_menu_header"><?php echo $lang['control_center_442'] ?></div>
+ 			<?php if (defined("APP_URL_EXTMOD")) { ?>
+ 				<div class="cc_menu_item"><i class="fas fa-cube fs14" style="margin-left:2px;margin-right:2px;"></i>&nbsp;<a href="<?php echo APP_URL_EXTMOD ?>manager/control_center.php"><?php echo $lang['global_142'] ?></a></div>
+ 			<?php } ?>
+diff --git a/ControlCenter/security_settings.php b/ControlCenter/security_settings.php
+index c2e11cf6..0b9d03ea 100644
+--- a/ControlCenter/security_settings.php
++++ b/ControlCenter/security_settings.php
+@@ -9,30 +9,31 @@ if (!SUPER_USER) redirect(APP_PATH_WEBROOT);
+ 
+ $changesSaved = false;
+ 
+ // If project default values were changed, update redcap_config table with new values
+ if ($_SERVER['REQUEST_METHOD'] == 'POST')
+ {
+ 	// Change checkbox "on" value to 0 or 1
+ 	$_POST['two_factor_auth_ip_range_include_private'] = (isset($_POST['two_factor_auth_ip_range_include_private']) && $_POST['two_factor_auth_ip_range_include_private'] == 'on') ? '1' : '0';
+ 	// Remove spaces and line breaks. Replace any semi-colons with commas.
+ 	$_POST['two_factor_auth_ip_range'] = str_replace(array(";", "\r", "\n", "\t", " "), array(",", "", "", "", ""), $_POST['two_factor_auth_ip_range']);
+ 	$_POST['two_factor_auth_ip_range_alt'] = str_replace(array(";", "\r", "\n", "\t", " "), array(",", "", "", "", ""), $_POST['two_factor_auth_ip_range_alt']);
+ 	// Loop
+ 	$changes_log = array();
+ 	$sql_all = array();
+ 	foreach ($_POST as $this_field=>$this_value) {
++        $this_value = (is_array($this_value) ? json_encode($this_value) : $this_value );
+ 		// Save this individual field value
+ 		$sql = "UPDATE redcap_config SET value = '".db_escape($this_value)."' WHERE field_name = '$this_field'";
+ 		$q = db_query($sql);
+ 
+ 		// Log changes (if change was made)
+ 		if ($q && db_affected_rows() > 0) {
+ 			$sql_all[] = $sql;
+ 			$changes_log[] = "$this_field = '$this_value'";
+ 		}
+ 	}
+ 
+ 	// Log any changes in log_event table
+ 	if (count($changes_log) > 0) {
+ 		Logging::logEvent(implode(";\n",$sql_all),"redcap_config","MANAGE","",implode(",\n",$changes_log),"Modify system configuration");
+ 	}
+@@ -144,30 +145,31 @@ print "<input type='hidden' name='redcap_csrf_token' value='".System::getCsrfTok
+ 		</div>
+ 	</td>
+ 	<td class="cc_data">
+ 		<select class="x-form-text x-form-field" style="" name="auth_meth_global">
+ 			<option value='none' <?php echo ($element_data['auth_meth_global'] == "none" ? "selected" : "") ?>><?php echo $lang['system_config_08'] ?></option>
+ 			<option value='table' <?php echo ($element_data['auth_meth_global'] == "table" ? "selected" : "") ?>><?php echo $lang['system_config_09'] ?></option>
+ 			<option value='ldap' <?php echo ($element_data['auth_meth_global'] == "ldap" ? "selected" : "") ?>>LDAP</option>
+ 			<option value='ldap_table' <?php echo ($element_data['auth_meth_global'] == "ldap_table" ? "selected" : "") ?>>LDAP & <?php echo $lang['system_config_09'] ?></option>
+ 			<option value='shibboleth' <?php echo ($element_data['auth_meth_global'] == "shibboleth" ? "selected" : "") ?>>Shibboleth <?php echo $lang['system_config_251'] ?></option>
+ 			<option value='openid_google' <?php echo ($element_data['auth_meth_global'] == "openid_google" ? "selected" : "") ?>>Google OAuth2 <?php echo $lang['system_config_251'] ?></option>
+ 			<option value='rsa' <?php echo ($element_data['auth_meth_global'] == "rsa" ? "selected" : "") ?>>RSA SecurID (two-factor authentication)</option>
+ 			<option value='openid' <?php echo ($element_data['auth_meth_global'] == "openid" ? "selected" : "") ?>>OpenID <?php echo $lang['system_config_251'] ?></option>
+ 			<option value='sams' <?php echo ($element_data['auth_meth_global'] == "sams" ? "selected" : "") ?>>SAMS (for CDC)</option>
+ 		    <option value='aaf' <?php echo ($element_data['auth_meth_global'] == "aaf" ? "selected" : "") ?>>AAF (Australian Access Federation)</option>
+ 			<option value='aaf_table' <?php echo ($element_data['auth_meth_global'] == "aaf_table" ? "selected" : "") ?>>AAF (Australian Access Federation) & <?php echo $lang['system_config_09'] ?></option>
++			<option value='shibboleth_table' <?php echo ($element_data['auth_meth_global'] == "shibboleth_table" ? "selected" : "") ?>>Shibboleth & <?php echo $lang['system_config_09'] ?></option>
+         </select>
+ 		<div class="cc_info" style="font-weight:normal;">
+ 			<?php echo $lang['system_config_222'] ?>
+ 			<a href="https://community.projectredcap.org/articles/691/authentication-how-to-change-and-set-up-authentica.html" target="_blank" style="text-decoration:underline;"><?php echo $lang['system_config_223'] ?></a><?php echo $lang['system_config_224'] ?>
+ 		</div>
+ 		<div class="cc_info">
+ 			<a href="<?php echo APP_PATH_WEBROOT . "ControlCenter/ldap_troubleshoot.php" ?>" style="color:#800000;text-decoration:underline;"><?php echo $lang['control_center_317'] ?></a>
+ 		</div>
+ 	</td>
+ </tr>
+ 
+ 
+ <!-- Two Factor Auth Settings -->
+ <tr>
+ 	<td colspan="2">
+@@ -637,62 +639,288 @@ print "<input type='hidden' name='redcap_csrf_token' value='".System::getCsrfTok
+ 			(e.g., Yahoo, MyOpenID)
+ 		</div>
+ 	</td>
+ </tr>
+ <tr>
+ 	<td class="cc_label"><?php echo $lang['system_config_247'] ?></td>
+ 	<td class="cc_data">
+ 		<input class='x-form-text x-form-field'  type='text' name='openid_provider_url' value='<?php echo htmlspecialchars($element_data['openid_provider_url'], ENT_QUOTES) ?>'  /><br/>
+ 		<div class="cc_info">
+ 			<?php echo $lang['system_config_249'] ?>
+ 		</div>
+ 	</td>
+ </tr>
+ 
+ <!-- Additional Shibboleth Authentication Settings -->
++<script>
++// Allow entry of custom values in a dropdown menu
++// if a value is entered that is not in $_SERVER, behavior will default to "None"
++// adapted from https://stackoverflow.com/a/20532400
++(function ($) {
++
++    $.fn.otherize = function (option_text, texts_placeholder_text) {
++        oSel = $(this);
++        option_id = oSel.attr('id') + '_other';
++        textbox_id = option_id + "_tb";
++
++        this.append("<option value='' id='" + option_id + "' class='otherize' >" + option_text + "</option>");
++        this.after("<input type='text' id='" + textbox_id + "' style='display: none; border-bottom: 1px solid black' placeholder='" + texts_placeholder_text + "'/>");
++        this.change(
++
++        function () {
++            oTbox = oSel.parent().children('#' + textbox_id);
++            oSel.children(':selected').hasClass('otherize') ? oTbox.show() : oTbox.hide();
++        });
++
++        $("#" + textbox_id).change(
++
++        function () {
++            $("#" + option_id).val($("#" + textbox_id).val());
++        });
++    };
++
++    $.fn.fillShibuserVal = function (selected_option) {
++        var presets = ['none', 'REMOTE_USER', 'HTTP_REMOTE_USER', 'HTTP_AUTH_USER', 'HTTP_SHIB_EDUPERSON_PRINCIPAL_NAME','Shib-EduPerson-Principal-Name']; 
++        if (!presets.includes(selected_option)) {
++            var custom_option = (`<option value='${selected_option}' selected>${selected_option}</option>`);
++            this.append(custom_option);
++        };
++    };
++
++}(jQuery));
++
++$(function () {
++    // passing $GLOBALS['shibboleth_username_field'] here results in the previous value being displayed until the page is navigated to again
++    // this may be due to $GLOBALS being processed "just-in-time" which is after the DOM has loaded
++    $("#otherize").fillShibuserVal('<?php echo js_escape($element_data['shibboleth_username_field']); ?>');
++
++    $("#otherize").otherize("other", "Enter your own");
++});
++</script>
++
++
+ <tr>
+ 	<td colspan="2">
+ 		<hr size=1>
+ 		<h4 style="font-size:14px;padding:0 10px;color:#800000;"><?php echo $lang['system_config_158'] ?></h4>
+ 	</td>
+ </tr>
+ <tr  id="shibboleth_username_field-tr" sq_id="shibboleth_username_field">
+ 	<td class="cc_label"><?php echo $lang['system_config_44'] ?></td>
+ 	<td class="cc_data">
+-		<select class="x-form-text x-form-field" style="" name="shibboleth_username_field">
++		<select id="otherize" class="x-form-text x-form-field" style="" name="shibboleth_username_field">
+ 			<option value='none' <?php echo ($element_data['shibboleth_username_field'] == "none" ? "selected" : "") ?>><?php echo $lang['system_config_45'] ?></option>
+ 			<option value='REMOTE_USER' <?php echo ($element_data['shibboleth_username_field'] == "REMOTE_USER" ? "selected" : "") ?>>REMOTE_USER</option>
+ 			<option value='HTTP_REMOTE_USER' <?php echo ($element_data['shibboleth_username_field'] == "HTTP_REMOTE_USER" ? "selected" : "") ?>>HTTP_REMOTE_USER</option>
+ 			<option value='HTTP_AUTH_USER' <?php echo ($element_data['shibboleth_username_field'] == "HTTP_AUTH_USER" ? "selected" : "") ?>>HTTP_AUTH_USER</option>
+ 			<option value='HTTP_SHIB_EDUPERSON_PRINCIPAL_NAME' <?php echo ($element_data['shibboleth_username_field'] == "HTTP_SHIB_EDUPERSON_PRINCIPAL_NAME" ? "selected" : "") ?>>HTTP_SHIB_EDUPERSON_PRINCIPAL_NAME</option>
+ 			<option value='Shib-EduPerson-Principal-Name' <?php echo ($element_data['shibboleth_username_field'] == "Shib-EduPerson-Principal-Name" ? "selected" : "") ?>>Shib-EduPerson-Principal-Name</option>
+ 		</select><br/>
+ 		<div class="cc_info">
+ 			<?php echo $lang['system_config_324'] ?>
+ 		</div>
+ 	</td>
+ </tr>
+ <tr  id="shibboleth_logout-tr" sq_id="shibboleth_logout">
+ 	<td class="cc_label"><?php echo $lang['system_config_46'] ?></td>
+ 	<td class="cc_data">
+ 		<input class='x-form-text x-form-field '  type='text' name='shibboleth_logout' value='<?php echo htmlspecialchars($element_data['shibboleth_logout'], ENT_QUOTES) ?>'  /><br/>
+ 		<div class="cc_info">
+ 			<?php echo $lang['system_config_47'] ?>
+ 		</div>
+ 	</td>
+ </tr>
+ 
++<!-- Shibboleth & Table Authentication Settings -->
++
++<?php
++    $shibboleth_table_config = json_decode($element_data['shibboleth_table_config'], TRUE);
++    $IdPData = $shibboleth_table_config['institutions'][0];
++?>
++
++<script>
++    const shibTableConfig = <?php echo $element_data["shibboleth_table_config"]; ?>;
++    const repeatShibParams = shibTableConfig.institutions;
++
++    // Append additional IdP options to dropdown
++    // TODO: if 'inst-login1' is set as default, 'inst-login<LAST>' will end up being set on page load due to $.clone
++    function appendDropdown(index) {
++        const prevEntry = $('[value="inst-login' + (index - 1) + '"]').last();
++        var newEntry = prevEntry.clone();
++        newEntry.insertAfter(prevEntry);
++        newEntry.text(repeatShibParams[index]['login_option'])
++                .attr('value', 'inst-login' + index);
++    }
++
++</script>
++
++<tr>
++    <td colspan="2">
++        <hr size=1>
++        <h4 style="font-size:14px;padding:0 10px;color:#800000;"><?php echo $lang['auth_01']; ?></h4>
++    </td>
++</tr>
++<tr>
++    <td colspan="2">
++        <a style="padding:0 10px;" href="<?php echo APP_PATH_WEBROOT . "Help/shib_table_help.php" ?>" target="_blank">Documentation on How to Configure Shibboleth & Table Options</a>
++    </td>
++</tr>
++<tr>
++    <td class="cc_label"><?php echo $lang['auth_02']; ?></td>
++    <td class="cc_data">
++        <select class="x-form-text x-form-field" style="" name="shibboleth_table_config[splash_default]">
++            <option value='non-inst-login' <?php echo ($shibboleth_table_config['splash_default'] == 'non-inst-login') ? "selected" : "" ?>><?php echo $lang['system_config_09']; ?></option>
++            <option value='inst-login0' <?php echo ($shibboleth_table_config['splash_default'] == 'inst-login0') ? "selected" : "" ?>><?php echo $IdPData['login_option']; ?></option>
++        </select><br/>
++    </td>
++</tr>
++<tr  id="shibboleth_table_table_login_option-tr" sq_id="shibboleth_table_table_login_option">
++    <td class="cc_label"><?php echo $lang['auth_03']; ?></td>
++    <td class="cc_data">
++        <input class='x-form-text x-form-field '  type='text' name='shibboleth_table_config[table_login_option]' value='<?php echo htmlspecialchars($shibboleth_table_config['table_login_option'], ENT_QUOTES) ?>'  />
++        <br/>
++        <div class="cc_info">
++            <?php echo $lang['auth_04']; ?>
++        </div>
++    </td>
++</tr>
++
++
++<!-- Repeat for Multiple IdPs -->
++
++<script>
++      $(document).ready(function() {
++
++          $(document).on('click', '.addIdP', function(event) {
++              event.preventDefault();
++              appendIdPOptions(true, $('.repeatingIdP').length - 1);
++          });
++
++          $(document).on('click', '.deleteIdP', function(event) {
++              event.preventDefault();
++              $(this).parents('tbody').fadeOut('normal', function () { $(this).remove(); });
++          });
++
++          function populateData() {
++              const numIdPs = repeatShibParams.length;
++              for (let i = 1; i < numIdPs; i++) {
++                  appendIdPOptions(false, i - 1);
++                  appendDropdown(i);
++              }
++          }
++          populateData();
++
++          function appendIdPOptions(userCreated = false, lastIdPIndex = null) {
++              var prevEntry = $('.repeatingIdP').last();
++              if (lastIdPIndex === 0) {
++                  // Only allow IdP deletion with >1 IdP entries
++                  $(prevEntry).find('.addIdP').after('<button class="deleteIdP"><?php echo $lang['auth_15']; ?></button>');
++              }
++              var newEntry = prevEntry.clone();
++              prevEntry.find('.addIdP').remove();
++              newEntry.insertAfter(prevEntry);
++
++              if (userCreated) {
++                  const lastIdPIndex = $('.repeatingIdP').length - 1;
++              }
++              const newIdPIndex = lastIdPIndex + 1;
++
++              // Increment indices and blank inputs
++              newEntry.find('input').each(function(name, input) {
++                  input.name = input.name.replace("[" + lastIdPIndex + "]", "[" + newIdPIndex + "]");
++                  const inputParam = input.name.split('[').pop().slice(0, -1);
++                  if (!userCreated) {
++                    try {
++                        input.value = repeatShibParams[newIdPIndex][inputParam];
++                    } catch (err) {
++                        input.value = '';
++                    }
++                  } else {
++                      input.value = '';
++                  }
++              });
++
++              if (userCreated) {
++                  newEntry.hide()
++                          .effect("highlight", {color: '#ffedc9'}, 1000);
++              }
++          }
++
++      });
++</script>
++
++
++<tbody class="repeatingIdP">
++    <tr>
++        <td colspan="2">
++            <hr size=1>
++            <h4 style="font-size:14px;padding:0 10px;color:#800000;"><?php echo $lang['auth_05']; ?></h4>
++        </td>
++    </tr>
++
++    <tr id="shibboleth_table_shibboleth_login_option-tr" sq_id="shibboleth_table_shibboleth_login_option">
++        <td class="cc_label"><?php echo $lang['auth_06']; ?></td>
++        <td class="cc_data">
++            <input class='x-form-text x-form-field ' type='text' name='shibboleth_table_config[institutions][0][login_option]' value='<?php echo htmlspecialchars($IdPData['login_option'], ENT_QUOTES) ?>' />
++            <br/>
++            <div class="cc_info">
++                <?php echo $lang['auth_07']; ?>
++            </div>
++        </td>
++    </tr>
++
++    <tr id="shibboleth_table_shibboleth_login_text-tr" sq_id="shibboleth_table_shibboleth_login_text">
++        <td class="cc_label"><?php echo $lang['auth_08']; ?></td>
++        <td class="cc_data">
++            <input class='x-form-text x-form-field ' type='text' name='shibboleth_table_config[institutions][0][login_text]' value='<?php echo htmlspecialchars($IdPData['login_text'], ENT_QUOTES) ?>' />
++            <br/>
++            <div class="cc_info">
++                <?php echo $lang['auth_09']; ?>
++            </div>
++        </td>
++    </tr>
++
++    <tr id="shibboleth_table_login_image-tr" sq_id="shibboleth_table_login_image">
++        <td class="cc_label"><?php echo $lang['auth_10']; ?></td>
++        <td class="cc_data">
++            <input class='x-form-text x-form-field ' type='text' name='shibboleth_table_config[institutions][0][login_image]' value='<?php echo htmlspecialchars($IdPData['login_image'], ENT_QUOTES) ?>' />
++            <br/>
++            <div class="cc_info">
++                <?php echo $lang['auth_11']; ?>
++            </div>
++        </td>
++    </tr>
++
++    <tr id="shibboleth_table_shibboleth_login_url-tr" sq_id="shibboleth_table_shibboleth_login_url">
++        <td class="cc_label"><?php echo $lang['auth_12']; ?></td>
++        <td class="cc_data">
++            <input class='x-form-text x-form-field ' type='text' name='shibboleth_table_config[institutions][0][login_url]' value='<?php echo htmlspecialchars($IdPData['login_url'], ENT_QUOTES) ?>' />
++            <br/>
++            <div class="cc_info">
++                <?php echo $lang['auth_16'] ?>
++            </div>
++        </td>
++    </tr>
++
++    <tr>
++        <td class="cc_label"><?php echo $lang['auth_13']; ?></td>
++        <td class="cc_data">
++            <button class='addIdP'><?php echo $lang['auth_14']; ?></button>
++        </td>
++    </tr>
++</tbody>
++<!-- End Repeat for Multiple IdPs -->
+ 
+ <!--***<AAF Modification>***-->
+ <tr>
+         <td colspan="2">
+                 <hr size=1>
+                 <h4 style="font-size:14px;padding:0 10px;color:#800000;"><?php echo $lang['system_config_552'] ?></h4>
+         </td>
+ </tr>
+ 
+ <tr  id="aafAccessUrl-tr" sq_id="aafAccessUrl">
+         <td class="cc_label"><?php echo $lang['system_config_553'] ?></td>
+         <td class="cc_data">
+                 <input class='x-form-text x-form-field' type='text' name='aafAccessUrl' value='<?php echo htmlspecialchars($element_data['aafAccessUrl'], ENT_QUOTES) ?>' id='aafAnch'/><br/>
+                 <div class="cc_info">
+                         <?php echo $lang['system_config_562'] ?>
+diff --git a/Help/shib_table_help.php b/Help/shib_table_help.php
+new file mode 100644
+index 00000000..d6a6776b
+--- /dev/null
++++ b/Help/shib_table_help.php
+@@ -0,0 +1,31 @@
++<?php
++// PHP 5.3.0 compliant path builder
++define('APP_PATH_WEBROOT', realpath(__DIR__ . '/..') . '/');
++?>
++
++<style>
++img {
++    max-width: 100%;
++}
++<?php
++include APP_PATH_WEBROOT . 'ExternalModules/manager/css/markdown.css';
++?>
++</style>
++
++<?php
++
++$pagePath = APP_PATH_WEBROOT . 'Resources/misc/shib_table_auth_documentation/shib_table_readme.md';
++require_once APP_PATH_WEBROOT . 'Libraries/Parsedown.php';
++
++$Parsedown = new \Parsedown();
++$html = $Parsedown->text(file_get_contents($pagePath));
++
++$search = '<img src="';
++// Cannot use APP_PATH_WEBROOT here for some reason, must be locally pathed
++$replace = $search . '../Resources/misc/shib_table_auth_documentation/';
++$html = str_replace($search, $replace, $html);
++
++print($html);
++
++
++?>
+diff --git a/LanguageUpdater/English.ini b/LanguageUpdater/English.ini
+index e65a09a5..0eee2ab5 100644
+--- a/LanguageUpdater/English.ini
++++ b/LanguageUpdater/English.ini
+@@ -12054,16 +12054,33 @@ alerts_31 = "This setting is optional for Alerts & Notifications. When enabled,
+ alerts_32 = "Learn more"
+ alerts_33 = "How to use 'stop logic' to disable a scheduled alert"
+ alerts_34 = "If you have alerts that will not be sent immediately but instead are scheduled to be sent later,
+ 			it might be a good idea to consider using 'stop logic' (otherwise known as a 'kill switch') in your conditional logic in order to manually stop
+ 			these scheduled alerts when needed. This might be used if somehow an alert was scheduled by accident and you need to quickly delete it.
+ 			NOTE: You must have checked the 'ensure logic is still true' checkbox in order for the 'stop logic' to work. By having the checkbox checked, it means
+ 			that every time a given record is saved or has data modified, REDCap will see if there is an alert scheduled for this record, and if so, it will then
+ 			double check to see if this condition/logic is still true. If condition is no longer true, it will delete the notification so that it never gets sent.
+ 			And if the record is modified again later, in which the condition then becomes true again, then the notification will get re-scheduled.
+ 			Without the 'ensure logic is still true' checkbox being checkbox, REDCap will leave the scheduled alert as-is and never delete it."
+ alerts_35 = "The 'stop logic' could be a complex set of conditional logic, or it could be as simple as a single field in the project (i.e., the kill switch).
+ 			For example, if you are wanting to schedule an alert when a participant is at least 18 years old, your logic might be '[age] >= 18'. And if you want
+ 			to add the 'stop logic' to be able to manually delete a scheduled alert, you could have '[age] >= 18 and [remove_alert] <> 1', in which the field
+ 			'remove alert' is a Yes/No field. So in this instance, if you wanted to have the scheduled alert deleted, you could simply go to the
+ 			data entry form where the 'remove alert' field is located, and set it to 'Yes'. This can be done a variety of different ways. This is merely a simple example
+-			to introduce this concept. <b>Remember, the key to using 'stop logic' is that the 'ensure logic is still true' checkbox MUST be checked.</b>"
+\ No newline at end of file
++			to introduce this concept. <b>Remember, the key to using 'stop logic' is that the 'ensure logic is still true' checkbox MUST be checked.</b>"
++
++auth_01 = "Shibboleth & Table Splash Page Customization:"
++auth_02 = "Default login method"
++auth_03 = "Table login selection title"
++auth_04 = "Clickable text to use table-based login"
++auth_05 = "Shibboleth Login Options"
++auth_06 = "Shibboleth login selection title"
++auth_07 = "Clickable text to use Shibboleth login"
++auth_08 = "Shibboleth login descriptive text"
++auth_09 = "Descriptive text displayed with Shibboleth login"
++auth_10 = "Shibboleth Link Image URL"
++auth_11 = "URL for image to be displayed to link to server's Shibboleth login"
++auth_12 = "URL for Shibboleth SP Session Initiatior"
++auth_13 = "Additional IdP Controls"
++auth_14 = "Add IdP"
++auth_15 = "Delete This IdP"
++auth_16 = "If left blank, will default to the value stored in $_SERVER['Shib-Handler']"
+diff --git a/Profile/user_profile.php b/Profile/user_profile.php
+index a7b19d3d..210046be 100644
+--- a/Profile/user_profile.php
++++ b/Profile/user_profile.php
+@@ -220,31 +220,31 @@ if ($two_factor_auth_enabled && $two_factor_auth_twilio_enabled) {
+ 			</tr>";
+ }
+ 
+ // Submit button (and Reset Password button, if applicable)
+ print 	"<tr>
+ 			<td></td>
+ 			<td style='white-space:nowrap;color:#800000;padding-bottom:20px;'>
+ 				<button class='jqbutton' style='font-weight:bold;' onclick=\"if(validateUserInfoForm()){ $('#form').submit(); } return false;\">{$lang['user_60']}</button>
+ 			</td>
+ 		</tr>";
+ 
+ 
+ ## LOGIN RELATED OPTIONS
+ // Reset Password: If user is a table-based user (i.e. in redcap_auth table), then give option to reset password
+ $passwordResetOptions = "";
+-if (($auth_meth_global == "table" || $auth_meth_global == "ldap_table" || strpos($auth_meth_global,'aaf')>-1) && User::isTableUser($userid)) { //***<AAF Modification>***
++if (($auth_meth_global == "table" || $auth_meth_global == "ldap_table" || $auth_meth_global == "shibboleth_table" || strpos($auth_meth_global,'aaf')>-1) && User::isTableUser($userid)) { //***<AAF Modification>***
+ 	// Reset password button & reset security question button
+ 	$passwordResetOptions .=
+ 		"<div style='padding:10px 20px 5px;'>
+ 			<button class='jqbuttonmed' style='margin-right:15px;color:#800000;' onclick=\"
+ 				simpleDialog('".js_escape($lang['user_13'])."','".js_escape($lang['user_12'])."',null,null,null,'".js_escape($lang['global_53'])."','$.post(app_path_webroot+\'ControlCenter/user_controls_ajax.php?action=reset_password_as_temp\',{ },function(data){if(data==\'0\'){alert(woops);return;}window.location.reload();});','".js_escape($lang['setup_53'])."');
+ 				return false;
+ 			\">{$lang['control_center_140']}</button>
+ 			<button class='jqbuttonmed' style='color:#000066;' onclick=\"
+ 				simpleDialog('".js_escape($lang['user_78'])."','".js_escape($lang['user_77'])."',null,null,null,'".js_escape($lang['global_53'])."','$.post(app_path_webroot+\'ControlCenter/user_controls_ajax.php?action=reset_security_question\',{ },function(data){if(data==\'0\'){alert(woops);return;}window.location.href=app_path_webroot_full+\'index.php?action=myprojects\';});','".js_escape($lang['setup_53'])."');
+ 				return false;
+ 			\">{$lang['control_center_4407']}</button>
+ 		</div>";
+ }
+ // If using Two Factor auth with Google Authenticator enabled
+ if ($two_factor_auth_enabled && $two_factor_auth_authenticator_enabled) {
+diff --git a/Resources/misc/shib_table_auth_documentation/img/control_fields_mapping.png b/Resources/misc/shib_table_auth_documentation/img/control_fields_mapping.png
+new file mode 100644
+index 00000000..222ca151
+Binary files /dev/null and b/Resources/misc/shib_table_auth_documentation/img/control_fields_mapping.png differ
+diff --git a/Resources/misc/shib_table_auth_documentation/img/dropdown_menu.png b/Resources/misc/shib_table_auth_documentation/img/dropdown_menu.png
+new file mode 100644
+index 00000000..d59f501f
+Binary files /dev/null and b/Resources/misc/shib_table_auth_documentation/img/dropdown_menu.png differ
+diff --git a/Resources/misc/shib_table_auth_documentation/img/shib_auth_settings.png b/Resources/misc/shib_table_auth_documentation/img/shib_auth_settings.png
+new file mode 100644
+index 00000000..6f2ae9b1
+Binary files /dev/null and b/Resources/misc/shib_table_auth_documentation/img/shib_auth_settings.png differ
+diff --git a/Resources/misc/shib_table_auth_documentation/shib_table_readme.md b/Resources/misc/shib_table_auth_documentation/shib_table_readme.md
+new file mode 100644
+index 00000000..a722aad6
+--- /dev/null
++++ b/Resources/misc/shib_table_auth_documentation/shib_table_readme.md
+@@ -0,0 +1,73 @@
++# Shibboleth & Table Authentication for REDCap
++
++# Usage
++
++Select the "Shibboleth & Table-based" option in the Authentication Method dropdown menu.
++
++![dropdown menu](img/dropdown_menu.png)
++
++Scroll further down on the page to a section titled **Additional Shibboleth Authentication Settings**, this section  will control the functionality of both Shibboleth and Shibboleth & Table options.
++
++![shib auth settings](img/shib_auth_settings.png)
++
++**Shibboleth Username Login Field**: The value that is provided by the server containing your Shibboleth login ID. If your institution does not use one of the values in the dropdown menu, select `other` and a text box will appear allowing you to enter the correct value. Make sure this string matches the value that has the username on your system. If your custom value is not found by the web server at login time, the web server will use whatever value Shibboleth has been configured to use as the username field. 
++
++**URL for Shibboleth Logout Page**: This should be set to `/Shibboleth.sso/Logout`. This will redirect users to the server's Shibboleth logout page. You can add [parameters to alter its behavior](https://wiki.shibboleth.net/confluence/display/SHIB2/NativeSPLogoutInitiator). In this example, `return=/stage_c/` redirects users to the path `/stage_c/` on the host after shibboleth logout. The `return` parameter can be useful if your REDCap is not installed at the host's web root.
++
++The section below controls the login page presented while using Shibboleth & Table-based option.
++
++![control fields mapping](img/control_fields_mapping.png)
++
++1. **Default login method**: Controls which login option users are first presented with upon navigating to your REDCap website. `Table-Based` or one of the IdP logins (referred to by title).
++2. **Table login selection title**: Controls the text displayed in the tab used to display the table-based login.
++3. **Shibboleth login selection title**: Controls the text displayed in the tab used to display a Shibboleth login.
++4. **Shibboleth login descriptive text**: Controls optional text to be displayed above a Shibboleth login button.
++5. **Shibboleth Link Image URL**: Controls the image presented to users in the button for a Shibboleth login.
++    - Note: if using an image hosted on your REDCap server, you may path it relative to your `webroot` rather than via `https://...`.
++6. **URL for Shibboleth SP Session Initiator**: Controls the URL used for Shibboleth authentication.
++    - This field should only be used if you need to support multiple IdPs or require additional, advanced Shibboleth configuration. If you are unsure, leave this blank and it will be set to your server's default IdP.
++7. **Additional IdP Logins**: Additional IdP options may be added, the fields are the same as 3-6. See the section below for further discussion of multiple IdPs.
++
++## Support for Multiple IdPs
++
++If you are hosting a REDCap instance used by multiple institutions which support Shibboleth authentication, you may wish to allow users to access REDCap via their respective institution's familiar login process; this can be accomplished by adding each institution as an additional **Id**entity **P**rovider. Additional IdPs must also be configured on your server at `/etc/shibboleth/shibboleth2.xml`. The process of adding multiple IdPs to your Shibboleth Service Provider is beyond the scope of this document.
++
++At the end of the options for your final IdP you will see a button labeled "Add IdP", clicking this will create a new set of fields for you to enter information for an additional IdP. If you only had one IdP before clicking this button, a button labelled "Delete This IdP" will appear.  
++At the end of the options for your final IdP, you will see a button labeled "Add IdP". Clicking this will create a new set of fields for you to enter information for an additional IdP. 
++
++In a multi-IdP configuration, each IdP section will show a "Delete This IdP". Note that if you delete the final IdP login, you will be unable to add additional IdPs until you have refreshed the page. 
++
++Adding or deleting IdP logins will not be permanent until you scroll to the bottom and click "Save Changes", after which tabs for each IdP that is filled in will appear on the login page in the order they were entered on the "Security & Authentication" page.
++
++## Configure Shibboleth
++
++The Shibboleth & Table Authentication login method needs to allow Shibboleth login but must not _require_ it. To meet that need, sample Apache directives for configuring your REDCap instance are available below. You will need to customize those directives for your site.
++
++```
++# Allow but do not *require* Shibboleth for a REDCap instance
++# This configuration is compatible with UF's shib-table authentication method
++
++# Instance name is "stage_c". Change this string to suit your need. 
++# If your REDCap is installed at the root of your host, remove '^/stage_c' from the locations below
++
++<Location ~ "^/stage_c">
++ AuthType shibboleth
++ ShibRequireSession Off
++ require shibboleth
++ ShibUseHeaders Off
++ <RequireAny>
++   require valid-user
++   require ip 127.0.0.1
++ </RequireAny>
++</Location>
++
++# Allow access to External Modules
++<LocationMatch "^/stage_c/redcap_v[\.\d]*/ExternalModules/">
++  <If "%{QUERY_STRING} =~ /.*prefix=(redcap_webservices|redcap_apb)*/" >
++    AuthType shibboleth
++    ShibRequireSession Off
++    ShibUseHeaders Off
++    require shibboleth
++  </If>
++</LocationMatch>
++```
