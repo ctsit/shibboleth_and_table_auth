@@ -6,8 +6,11 @@ This repository provides a patch to Vanderbilt University's REDCap to allow Shib
 This tool reads the contents of a REDCap zip file (referred to throughout this document as `redcapN.M.O.zip`, `N.M.O` being the redcap version number) and patches it to add the ability to simultaneously support Shibboleth and table-based users. Shibboleth users who do not already exist in REDCap will be prompted to create an account and will be able to log in after as is the normal behavior with the Shibboleth authentication. Table based users can be created via the Control Center as is normal in table-based authentication.
 
 # Requirements
-A REDCap zip file downloaded from Vanderbilt's community web site.
-Access to a terminal with a bash shell and basic gnu utilities to run the apply_patch script.
+
+The patch file requires these resources:
+
+* A REDCap zip file downloaded from Vanderbilt's community web site.
+* Access to a terminal with a bash shell and basic gnu utilities to run the `apply_patch` script.
 
 # Instructions
 Visit `https://github.com/ctsit/uf_redcap_shibboleth_config/releases` to download the latest release version of this repository. 
@@ -41,7 +44,7 @@ If you currently have this version of REDCap running and want to add Shibboleth 
 
 ## After your REDCap is launched or updated
 
-You will need to update REDCap's MySQL database if you want to support the new customization fields. A SQL script has been provided for this at `shib_table_sql/9.1.1.sql`. This file will need to be applied to your REDCap server's database. Use whatever method suits you to apply these changes. If additional SQL files exist in that folder, apply them all, in order, from lowest version number to highest.
+You will need to update REDCap's MySQL database if you want to support the new customization fields. A SQL script has been provided for this at `shib_table_sql/`. Use the lastest *.SQL file in that folder. This file will need to be applied to your REDCap server's database. Use whatever method suits you to apply these changes.
 
 # Usage
 

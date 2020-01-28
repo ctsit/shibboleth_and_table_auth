@@ -69,7 +69,8 @@ pushd $TEMP_UNZIP_DIR/redcap/redcap_v${REDCAP_VERSION} > /dev/null
 
 echo "Zipping patched redcap into ${TARGET_FILE}"
 pushd $TEMP_UNZIP_DIR > /dev/null
-    zip -q -ur ${TARGET_DIR}/${REDCAP_ZIP} . # write a new zip file with the patch applied
+    rm -f ${TARGET_DIR}/${REDCAP_ZIP}
+    zip -q -r ${TARGET_DIR}/${REDCAP_ZIP} . # write a new zip file with the patch applied
 
 pushd -0 > /dev/null && dirs -c # return to home directory and clear directory stack
 
